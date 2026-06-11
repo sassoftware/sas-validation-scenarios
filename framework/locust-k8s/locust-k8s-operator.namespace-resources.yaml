@@ -1,0 +1,193 @@
+# ServiceAccount,Role,RoleBinding,Deployment
+---
+# Source: locust-k8s-operator/templates/serviceaccount-and-roles.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: locust-operator-locust-k8s-operator
+  labels:
+    helm.sh/chart: locust-k8s-operator-0.8.0
+    app.kubernetes.io/name: locust-k8s-operator
+    app.kubernetes.io/instance: locust-operator
+    app.kubernetes.io/version: "0.8.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: locust-k8s-operator/templates/serviceaccount-and-roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: locust-operator-locust-k8s-operator
+rules:
+  - apiGroups: [locust.io]
+    resources:
+      - locusttests
+    verbs:
+      - list
+      - get
+      - watch
+  - apiGroups: ["*"]
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+  - apiGroups: ["*"]
+    resources:
+      - jobs
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+---
+# Source: locust-k8s-operator/templates/serviceaccount-and-roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: locust-operator-locust-k8s-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: locust-operator-locust-k8s-operator
+subjects:
+  - kind: ServiceAccount
+    name: locust-operator-locust-k8s-operator
+---
+# Source: locust-k8s-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-operator-locust-k8s-operator
+  labels:
+    helm.sh/chart: locust-k8s-operator-0.8.0
+    app.kubernetes.io/name: locust-k8s-operator
+    app.kubernetes.io/instance: locust-operator
+    app.kubernetes.io/version: "0.8.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: locust-k8s-operator
+      app.kubernetes.io/instance: locust-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: locust-k8s-operator
+        app.kubernetes.io/instance: locust-operator
+    spec:
+      serviceAccountName: locust-operator-locust-k8s-operator
+      containers:
+        - name: locust-k8s-operator
+          image: "lotest/locust-k8s-operator:0.8.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: micronaut-port
+              containerPort: 8080
+          livenessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /health
+              port: micronaut-port
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 10
+          readinessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /health
+              port: micronaut-port
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 10
+          resources: {}
+          env:
+            - name: APP_SERVER_PORT
+              value: "8080"
+            # K8s config
+            - name: K8S_NAMESPACE
+              value: ${replace_NAMESPACE}
+            # Kafka config
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "localhost:9092"
+            - name: KAFKA_SECURITY_ENABLED
+              value: "false"
+
+            # Load generation job config
+            - name: JOB_TTL_SECONDS_AFTER_FINISHED
+              value: ""
+
+            # Load generation resource config
+            - name: POD_CPU_REQUEST
+              value: "2000m"
+            - name: POD_MEM_REQUEST
+              value: "1024Mi"
+            - name: POD_EPHEMERAL_REQUEST
+              value: "30M"
+            - name: POD_CPU_LIMIT
+              value: "3500m"
+            - name: POD_MEM_LIMIT
+              value: "2048Mi"
+            - name: POD_EPHEMERAL_LIMIT
+              value: "50M"
+            - name: ENABLE_AFFINITY_CR_INJECTION
+              value: "true"
+            - name: ENABLE_TAINT_TOLERATIONS_CR_INJECTION
+              value: "true"
+
+            # Metrics Exporter config
+            - name: METRICS_EXPORTER_IMAGE
+              value: "containersol/locust_exporter:v0.5.0"
+            - name: METRICS_EXPORTER_PORT
+              value: "9646"
+            - name: METRICS_EXPORTER_IMAGE_PULL_POLICY
+              value: "IfNotPresent"
+            - name: METRICS_EXPORTER_CPU_REQUEST
+              value: "250m"
+            - name: METRICS_EXPORTER_MEM_REQUEST
+              value: "128Mi"
+            - name: METRICS_EXPORTER_EPHEMERAL_REQUEST
+              value: "30M"
+            - name: METRICS_EXPORTER_CPU_LIMIT
+              value: "250m"
+            - name: METRICS_EXPORTER_MEM_LIMIT
+              value: "128Mi"
+            - name: METRICS_EXPORTER_EPHEMERAL_LIMIT
+              value: "50M"
+
+            # Metric config
+            - name: METRICS_ENABLE
+              value: "true"
+            - name: METRICS_WEB_ENABLE
+              value: "true"
+            - name: METRICS_JVM_ENABLE
+              value: "true"
+            - name: METRICS_UPTIME_ENABLE
+              value: "true"
+            - name: METRICS_PROCESSOR_ENABLE
+              value: "true"
+            - name: METRICS_FILES_ENABLE
+              value: "false"
+            - name: METRICS_LOGBACK_ENABLE
+              value: "false"
+            - name: METRICS_EXECUTOR_ENABLE
+              value: "false"
+            - name: METRICS_PROMETHEUS_STEP
+              value: "PT30S"
+...

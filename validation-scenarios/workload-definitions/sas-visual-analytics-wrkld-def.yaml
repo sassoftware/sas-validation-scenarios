@@ -1,0 +1,37 @@
+workload-definitions:
+  workload-definition-specs:
+    - name: sas-visual-analytics
+      description: SAS Visual Analytics Tests
+      custom-resource-spec:
+        namespace: testing
+        config-map-name: sas-visual-analytics-map
+        k8s-operator: locust-k8s-operator.yaml
+        workloads:
+          - name: va-simplecreate01
+            scenario-config: application-scenarios/sas-visual-analytics/scenario-config.yaml
+            path: application-scenarios/sas-visual-analytics/tests
+            task: va_simplecreate01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: vs-simplecreate01
+            scenario-config: application-scenarios/sas-visual-analytics/scenario-config.yaml
+            path: application-scenarios/sas-visual-analytics/tests
+            task: vs_simplecreate01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: vdmml-simplecreate01
+            scenario-config: application-scenarios/sas-visual-analytics/scenario-config.yaml
+            path: application-scenarios/sas-visual-analytics/tests
+            task: vdmml_simplecreate01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+

@@ -1,0 +1,36 @@
+workload-definitions:
+  workload-definition-specs:
+    - name: helloviya-advanced
+      description: Simple viya tests for validating various SAS viya applications 
+      custom-resource-spec:
+        namespace: testing
+        config-map-name: helloviya-advanced-map
+        k8s-operator: locust-k8s-operator.yaml
+        workloads:
+          - name: st-runsleep01
+            scenario-config: helloviya-advanced/scenario-config.yaml
+            path: helloviya-advanced/tests
+            task: st_runsleep01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: st-runsleep02
+            scenario-config: helloviya-advanced/scenario-config.yaml
+            path: helloviya-advanced/tests
+            task: st_runsleep02.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: va-simplecreate01
+            scenario-config: helloviya-advanced/scenario-config.yaml
+            path: helloviya-advanced/tests
+            task: va_simplecreate01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1

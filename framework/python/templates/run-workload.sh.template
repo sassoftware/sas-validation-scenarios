@@ -1,0 +1,75 @@
+# This file was generated using template: run-workload.sh.template and will be overwritten.
+kubectl -n $namespace apply -f $k8s_cr
+sleep 10s
+LOCUSTRESOURCELIST=$$( kubectl -n $namespace get locusttests.locust.io,pod 2>/dev/null );
+
+#### Start
+
+MMM1=$$( kubectl -n $namespace get pod -l locust.io/\role='master' --no-headers )
+WWW1=$$( kubectl -n $namespace get pod -l locust.io/\role='worker' --no-headers )
+MMM2=$$( echo "$$MMM1" | awk '{print $$1"_"$$2"_"$$3"_"$$5}' ); MMM2=$$( echo $$MMM2 )
+WWW2=$$( echo "$$WWW1" | awk '{print $$1"_"$$2"_"$$3"_"$$5}' ); WWW2=$$( echo $$WWW2 )
+MASTRPOD=$$( echo "$$MMM1" | grep '2/2' | awk '{print $$1}')
+WRKRPODS=$$( echo "$$WWW1" | grep '1/1' | awk '{print $$1}')
+
+for iii in $$MASTRPOD $$WRKRPODS; do
+    echo "nohup kubectl -n $namespace logs $$iii -f 1> $logs_dir/$$iii.log 2>&1 &"
+    nohup kubectl -n $namespace logs $$iii -f 1> $logs_dir/$$iii.log 2>&1 &
+done
+
+
+#### End
+
+echo "kubectl -n $namespace get locusttests.locust.io,pod"; echo "$$LOCUSTRESOURCELIST"
+
+echo ""
+echo""
+echo "LIVE LOGS: YOU CAN LOOK AT LOGS USING COMMAND BELOW:"
+echo  "tail -f $logs_dir/${name}-test*.log"
+echo""
+echo""
+
+kubectl wait --for=condition=complete job/${name}-test-worker --timeout=${timeout} -n $namespace
+sleep 10s
+
+cat $logs_dir/${name}*.log > $logs_dir/${name}_merged.log
+
+MMM1=$$(kubectl -n $namespace get pods | grep master | awk '{print $$1}')
+users=$$(yq e '.spec.masterCommandSeed' $k8s_cr | awk -F'--users ' '{print $$2}' | awk '{print $$1}')
+kubectl cp -n $namespace $namespace/$$MMM1:/home/locust/stats.csv_stats.csv ${stats_location}
+kubectl cp -n $namespace $namespace/$$MMM1:/home/locust/stats.csv_failures.csv $failures_location
+kubectl cp -n $namespace $namespace/$$MMM1:/home/locust/stats.csv_exceptions.csv $exceptions_location
+kubectl -n $namespace delete -f $k8s_cr
+
+### POST PROCESSING FOR RESULTS SUMMARY
+
+cat $logs_dir/${name}*.log | grep error > $logs_dir/${name}_error.log
+
+# echo "Error file is $logs_dir/${name}_error.log "
+if [ -f "$logs_dir/${name}_error.log" ] && [ ! -s "$logs_dir/${name}_error.log" ]; then
+  echo ""
+  echo "*******************************"  
+  echo " ${name} TESTS PASSED         "
+  echo "*******************************" 
+else
+  echo "********************************"
+  echo " ${name} TESTS FAILED          "
+  echo "********************************"
+  echo "" 
+  echo "HERE ARE THE EXCEPTIONS:"
+  echo "" 
+  cat $logs_dir/${name}_error.log
+  cat $logs_dir/${name}_error.log | grep error
+  cat $logs_dir/${name}_error.log | grep fail
+fi
+echo ""
+echo ""
+sleep 5s
+echo "HERE ARE YOUR RESULTS (timings are in milliseconds):"
+echo "----------------------------------------------------"
+echo ""
+
+sed -n "/^Type/,/^Type/p" $logs_dir/${name}-test-master*.log
+sed -n "/^Error/,/^Error/p" $logs_dir/${name}-test-master*.log
+
+sleep 10s

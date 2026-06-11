@@ -1,0 +1,19 @@
+workload-definitions:
+  workload-definition-specs:
+    - name: sas-viya-cli-batch
+      description: sas-viya cli batch sas programs 
+      custom-resource-spec:
+        namespace: testing
+        config-map-name: sas-viya-cli-batch-map
+        k8s-operator: locust-k8s-operator.yaml
+        workloads:
+          - name: test
+            scenario-config: technology-scenarios/sas-viya-cli/scenario-config.yaml
+            path: technology-scenarios/sas-viya-cli/tests
+            task: test.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+        

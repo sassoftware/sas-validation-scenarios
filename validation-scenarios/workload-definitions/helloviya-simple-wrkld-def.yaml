@@ -1,0 +1,28 @@
+workload-definitions:
+  workload-definition-specs:
+    - name: helloviya-simple
+      description: Basic Viya tests
+      custom-resource-spec:
+        namespace: testing
+        config-map-name: helloviya-simple-map
+        k8s-operator: locust-k8s-operator.yaml
+        workloads:
+          - name: logonoff
+            scenario-config: helloviya-simple/scenario-config.yaml
+            path: helloviya-simple/tests
+            task: logonoff.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: createcompute
+            scenario-config: helloviya-simple/scenario-config.yaml
+            path: helloviya-simple/tests
+            task: createcompute.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+

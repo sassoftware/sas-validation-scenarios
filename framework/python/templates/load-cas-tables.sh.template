@@ -1,0 +1,3 @@
+
+## Load table into memory
+sas-viya --profile ${cli_profile} -k cas tables load --table=${table_name} --server ${server} --caslib ${name}

@@ -1,0 +1,41 @@
+
+
+# Check if file already exists on remote server
+echo "Checking if file already exists on remote server..."
+ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no ${pem_file} ${user}@${server} "test -f ${destination}"
+
+if [ $$? -eq 0 ]; then
+    echo "File ${destination} already exists on remote server. Skipping copy."
+else
+    echo "File does not exist on remote server. Proceeding with copy..."
+    
+    echo "Copying ${source} to folder: ${destination} "
+    scp -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i ${pem_file} ${source} joguli@52.230.253.33:${dest_folder}/
+    if [ $$? -ne 0 ]; then
+            echo "ERROR: Copy command failed: "
+            echo " scp -i ${pem_file} ${source} ${user}@${server}:${dest_folder}/ "
+            exit 1
+    fi
+    
+    echo "File ${source} copied successfully."
+fi
+
+
+#echo "Copying ${source} to folder: ${dest_folder}/ "
+#scp -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i ${pem_file} ${source} ${user}@${server}:${dest_folder}/
+#if [ $$? -ne 0 ]; then
+#        echo "ERROR: Copy command failed: "
+#        echo " scp -i ${pem_file} ${source} ${user}@${server}:${dest_folder}/ "
+#        exit 1
+#fi
+
+
+echo "Setting 777 permissions for ${destination}"
+ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -i ${pem_file} ${user}@${server} "chmod 777 ${destination}"
+if [ $$? -ne 0 ]; then
+        echo "ERROR: Error setting permissions: "
+        echo " ssh -i ${pem_file} ${user}@${server} \"chmod 777 ${destination}\" "
+        exit 1
+fi
+
+echo "File ${source} copied successfully."

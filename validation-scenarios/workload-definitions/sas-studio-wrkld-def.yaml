@@ -1,0 +1,54 @@
+workload-definitions:
+  workload-definition-specs:
+    - name: sas-studio 
+      description: SAS Studio Validation Scenario
+      custom-resource-spec:
+        namespace: testing
+        config-map-name: sas-studio-map
+        k8s-operator: locust-k8s-operator.yaml
+        workloads:
+          - name: st-runsleep01
+            scenario-config: application-scenarios/sas-studio/scenario-config.yaml
+            path: application-scenarios/sas-studio/tests
+            task: st_runsleep01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: st-runsleep02
+            scenario-config: application-scenarios/sas-studio/scenario-config.yaml
+            path: application-scenarios/sas-studio/tests
+            task: st_runsleep02.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: st-analystoptimizeflow
+            scenario-config: application-scenarios/sas-studio/scenario-config.yaml
+            path: application-scenarios/sas-studio/tests
+            task: st_analystoptimizeflow.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: st-queryflow
+            scenario-config: application-scenarios/sas-studio/scenario-config.yaml
+            path: application-scenarios/sas-studio/tests
+            task: st_queryflow.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: st-40nodesflow
+            scenario-config: application-scenarios/sas-studio/scenario-config.yaml
+            path: application-scenarios/sas-studio/tests
+            task: st_40nodesflow.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1

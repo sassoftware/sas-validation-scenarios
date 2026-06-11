@@ -1,0 +1,24 @@
+scenario-config:
+  name: hello-viya-simple
+  description: Simple logon and logoff test using saslogon
+  dependencies:
+    # List of resources the needed as part of the config map generation.
+    # The type can be one of the following:
+    #   common - A common framework file (path is relative to root of framework/execution/common)
+    #   resource - A resource file that will be copied to the NFS mount (path is relative to the scenario folder)
+    #   cli-profile - A sas-viya-cli profile template.  This is used to create a profile for the cli to use when running commands 
+    #     (path is relative to the root of framework/python/templates folder).
+    #   trusted-certs - A trusted certs file to be used when running commands.  The path and file are placeholders, 
+    #     name are substituted when creating the config map.
+    - type: common
+      path: framework/execution/common
+      file: events.py
+    - type: common
+      path: framework/execution/common
+      file: auth.py
+    - type: common
+      path: framework/execution/common
+      file: exception.py
+    - type: common
+      path: framework/execution/common
+      file: scenario_utils.py
