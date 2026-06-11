@@ -1,0 +1,1 @@
+data _null_;call sleep(20,1);proc print data=sashelp.class;run;

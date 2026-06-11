@@ -1,0 +1,14 @@
+# Global configuration for scenarios not requiring prerequisites before execution
+global-config:
+  ## Framework configuration (No changes should be required) begin
+  description: Global configuration for the validation workloads
+  framework-base-location: ../framework
+  scenarios-base-location: ./scenarios
+  generated-base-location: ./generated
+  ## Framework configuration end
+  ## User Workload Execution configuration begin
+  hostname: https://my-viya-system.xyz.sas.com
+  kube-config: /some.location/kube.config
+  ## User Workload Setup configuration end
+  ## Advanced prerequisites configuration
+  #trusted-certs: /path-to-my-trusted-certificates-file.pem 

@@ -1,0 +1,20 @@
+framework-defaults:
+  workload-definition:
+    name: scenario-default
+    description: This is a default scenario workload definition
+    namespace: testing
+    config-map-name: scenario-map
+    k8s-operator: locust-k8s-operator.yaml
+    users: 1
+    spawn-rate: 1
+    iterations: 1
+    run-time: 8h
+    csv: stats.csv
+    worker-replicas: 1
+    timeout: 1h
+    custom-modules-name: common
+    custom-modules-path: framework/python
+    custom-modules-task: common.py
+  workload-setup:
+    cas-server: cas-shared-default
+    viya-cli-profile: default

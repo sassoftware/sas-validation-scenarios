@@ -1,0 +1,8 @@
+workload-overrides:
+  ## This is experimental and not fully supported
+  users: 5
+  spawn-rate: 3 
+  iterations: 1 
+  worker-replicas: 5
+  namespace: testing
+  csv: stats.csv

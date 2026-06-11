@@ -1,0 +1,19 @@
+apiVersion: locust.io/v1
+kind: LocustTest
+metadata:
+  name: modelstudio.test
+  namespace: testing
+spec:
+  image: locplaytest.azurecr.io/locplaytest
+  imagePullSecrets:
+    - locplaytest
+  masterCommandSeed:
+    --locustfile /lotest/src/big_de48_wa.py
+    --host https://my_viya.xyz.com 
+    --users 5
+    --spawn-rate 3 
+    --iterations=1 
+    --csv stats.csv 
+  workerCommandSeed: --locustfile /lotest/src/big_de48_wa.py
+  workerReplicas: 5
+  configMap: modelstudiotests-map

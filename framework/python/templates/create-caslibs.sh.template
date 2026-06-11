@@ -1,0 +1,19 @@
+
+## Create the CasLib
+sas-viya --profile ${cli_profile} -k cas caslibs create path --server ${server} --name ${name} --path ${path}
+
+## Set permissions
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant ReadInfo
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant Select
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant LimitedPromote
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant Promote
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant CreateTable
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant DropTable
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant DeleteSource
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant Insert
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant Update
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant Delete
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant AlterTable
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant AlterCaslib
+sas-viya --profile ${cli_profile} -k cas caslibs add-control --server ${server} --caslib ${name} --group '*' --grant ManageAccess
+  

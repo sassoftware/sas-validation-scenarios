@@ -1,0 +1,21 @@
+workload-definitions:
+  workload-definition-specs:
+    - name: ${name}
+      description: ${description}
+      custom-resource-spec:
+        namespace: ${namespace}
+        config-map-name: ${config_map_name}
+        k8s-operator: ${k8s_operator}
+        workloads:
+          - name: ${workloads_name}
+            path: ${workloads_path}
+            task: ${workloads_task}
+            csv: ${workloads_csv}
+            users: ${workloads_users}
+            spawn-rate: ${workloads_spawn_rate}
+            iterations: ${workloads_iterations}
+            worker-replicas: ${workloads_worker_replicas}
+        custom-modules:
+          - name: ${custom_module_name}
+            path: ${custom_module_path}
+            task: ${custom_module_task}

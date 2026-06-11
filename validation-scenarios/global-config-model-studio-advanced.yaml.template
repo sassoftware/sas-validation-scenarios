@@ -1,0 +1,36 @@
+# Example global configuration for Model Studio scenarios that have advanced prerequisites before execution
+global-config:
+  ## Framework configuration (No changes should be required)  begin
+  description: Global configuration for the validation workloads
+  framework-base-location: ../framework
+  scenarios-base-location: ./scenarios
+  generated-base-location: ./generated
+  ## Framework configuration end
+  ## User Workload Execution configuration begin
+  hostname: https://my-viya-system.xyz.sas.com
+  kube-config: /some.location/kube.config
+  ## User Workload Setup configuration end
+  ## Advanced prerequisites configuration
+  # Authentication type of the target environment: form | oauth-client 
+  auth-client-type: oauth-client
+  auth-client-id: validation-scenarios
+  auth-client-secret: very-secret
+  # If cli profile not used, set to "Default"
+  viya-cli-profile: Default
+  ## Workload Setup configuration begin
+  cas-server: cas-shared-default
+  sas-admin-user: sasadmin
+  sas-admin-passwd: very-secret
+  pem-file:  /some.location/my-key.pem
+  nfs-server: 0.0.0.0
+  nfs-user: my-authorized-user
+  # Folder name where source data may be copied from 
+  scenario-data-source-location: /Volumes/vmrnd/staging/select-appropriate-sub-folder
+  model-studio:
+    # Full path to the import converter tool:
+    import-converter: /some.location/import-converter
+    ## User names for generating user based test resources
+    users: 
+    - username: user1
+      password: user1
+  ## Workload Setup configuration end  

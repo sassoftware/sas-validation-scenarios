@@ -1,0 +1,8 @@
+{
+  "Default": {
+    "ansi-colors-enabled": "true",
+    "oauth-client-id": "sas.cli",
+    "output": "text",
+    "sas-endpoint": "${hostname}"
+  }
+}
