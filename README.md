@@ -22,7 +22,7 @@ Updates or adjustments are implemented and maintained within the associated bran
 See [VERSIONS.md](VERSIONS.md) for a list of currently supported versions.
 
 > [!NOTE]
-> The project's main branch is currently targeting 2026.04 Viya 4 deployments.
+> This branch of the project is optimized for 2026.02 Viya 4 deployments.
 
 ## Scenarios and Resources
 
