@@ -1,4 +1,4 @@
-# What are SAS-Validation-Scenarios?
+# What are SAS Validation Scenarios?
 The **sas-validation-scenarios** repository contains a collection of tools and scripts designed to run automated tests against various **SAS Viya 4** applications to verify functionality and performance. These tests are fully self-contained and can be executed on any cloud platform and across any SAS Viya cadence. They can be run as single-user tests or scaled to simulate load with multiple concurrent users. The only requirement is access to a valid SAS Viya 4 web application.
 
 > [!WARNING]
