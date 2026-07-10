@@ -27,7 +27,7 @@ scenario-config:
       file: test.sas
     - type: cli-profile
       path: framework/python/templates
-      file: config.json.template
+      file: config.json
     - type: trusted-certs
-      path: trusted-certs-path-global-config
-      file: trusted-certs-path-global-config
+      path: framework/execution/common
+      file: trustedcerts.pem
