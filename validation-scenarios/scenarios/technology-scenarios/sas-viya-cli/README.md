@@ -80,18 +80,18 @@ cd sas-validation-scenarios/validation-scenarios
 # Monitoring sas-viya cli jobs and getting results of test execution
 You will need to have an install of sas-viya cli to monitor the jobs running via the sas-validation-framework. 
 
-# sas-viya cli scenarios list
-
-| testcase        | Details                              | sas program | resources/inputdata | 
-|------------------|---------------------------------------------|----------|---------| 
-| **test.py** | **test.sas** | Runs test.sas program in batch which does a sleep for 120 sec | None |     
-
-
-https://go.documentation.sas.com/doc/en/sasadmincdc/v_064/calcli/titlepage.htm
+To learn more about sas-viya cli refer to this page;
+https://go.documentation.sas.com/doc/en/sasadmincdc/v_077/calcli/titlepage.htm
 
 Open an interactive session to sas-viya cli and log in as an SAS admnistrator. Here are some useful commands:
 
     sas-viya batch jobs list (lists all jobs running)
     sas-viya batch jobs get-results --id <id>
+
+# sas-viya cli scenarios list
+
+| testcase        | Details                              | sas program | resources/inputdata | 
+|------------------|---------------------------------------------|----------|---------| 
+| **test.py** | **test.sas** | Runs test.sas program in batch which does a sleep for 120 sec | None |     
 
   
