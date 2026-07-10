@@ -1,14 +1,9 @@
-| testcase        | Details                              | sas program | resources | 
-|------------------|---------------------------------------------|----------|---------| 
-| **test.py** | Runs batch sas program which does a sleep for 120 sec | test.sas | None |     
-
-
-
 This scenario runs the sas-viya cli commands in a locust master-worker setup. 
+
 No install of sas-viya cli is necessary as the docker image that we will be using for these tests includes the sas-viya cli in it. 
+
 This image has the sas-viya excutable and all the plugins built into the image. 
-The image resides in our azure container repository (see below). 
-This image is set up to have anonymous pull access which allows for teams across SAS full access to the image.
+The image resides in our azure container repository and is set up to have anonymous pull access which allows for users to have full access to the image.
 
 `image: sasvalidationscenarios.azurecr.io/loadtest-v1.2`
 
@@ -42,12 +37,10 @@ This folder consists of a set of python files that runs the sas-viya cli batch p
 Each python file is the main python file that runs the sas program with the same name in the resources folder. 
 A description of what each program does is detailed below. 
 The sas programs in the resources folder are used as input for the python programs in this folder. 
-The data needed to run these tests can be found in the other [resources](https://gitlab.sas.com/aat/sas-validation-scenarios-resources.git) repo. 
 
 The workload-definition associated with this scenarios is as follows:
 
 `sas-viya-cli-wrkld-def.yaml`
-
 
 # How to Execute sas-viya-cli scenarios
 
@@ -89,6 +82,11 @@ cd sas-validation-scenarios/validation-scenarios
 You will need to have an install of sas-viya cli to monitor the jobs running via the sas-validation-framework. 
 
 If you are new to sas-viya command line interface, refer to this doc to get started:
+
+| testcase        | Details                              | sas program | resources | 
+|------------------|---------------------------------------------|----------|---------| 
+| **test.py** | Runs batch sas program which does a sleep for 120 sec | test.sas | None |     
+
 
 https://go.documentation.sas.com/doc/en/sasadmincdc/v_064/calcli/titlepage.htm
 
