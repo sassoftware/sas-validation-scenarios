@@ -14,13 +14,15 @@ This image is set up to have anonymous pull access which allows for teams across
 
 In order to run this scenario, you will need the following from your viya environment:
 
-- A valid **trustedcerts.pem** file from your viya environment. Place this file in the sas-validation-scenarios/framework/execution/common folder. 
-  Also make sure the file is named "trustedcerts.pem"
+- A valid **trustedcerts.pem** file from your viya environment. Place this file in the sas-validation-scenarios/framework/execution/common folder and make sure the file is named "trustedcerts.pem"
+  
   This can be obtained as follows:
+  
   `kubectl -n viya cp $(kubectl get pod -n viya | grep "sas-logon-app" | head -1 | awk -F" " '{print $1}'):/security/trustedcerts.pem /tmp/trustedcerts.pem`
  
-- A valid **config.json** file with a definition for the default profile. Place this file also in the sas-validation-scenarios/framework/execution/common folder. 
-  Also make sure the file is named "config.json"
+- A valid **config.json** file with a definition for the default profile. 
+
+  Place this file also in the sas-validation-scenarios/framework/execution/common folder and make sure the file is named "config.json"
 
 An example config.json file should look like this:
 
