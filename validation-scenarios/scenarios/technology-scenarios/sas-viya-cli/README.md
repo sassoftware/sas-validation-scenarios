@@ -33,10 +33,10 @@ An example config.json file should look like this:
 ```
 
 # sas-viya cli execution files
-This folder consists of a set of python files that runs the sas-viya cli batch programs at load using locust. 
-Each python file is the main python file that runs the sas program with the same name in the resources folder. 
-A description of what each program does is detailed below. 
-The sas programs in the resources folder are used as input for the python programs in this folder. 
+The tests folder under the sas-viya-cli folder consists of a set of python files that runs the sas-viya cli batch programs at load using locust. 
+
+Each python file is the main python file that runs the sas program with the same name in the sas-viya-cli/resources folder. 
+The sas programs in the resources folder are used as input for the python programs in the tests folder. 
 
 The workload-definition associated with this scenarios is as follows:
 
@@ -44,19 +44,18 @@ The workload-definition associated with this scenarios is as follows:
 
 # How to Execute sas-viya-cli scenarios
 
-THE FOLLOWING STEPS WILL BE REPLACED WITH A BETTER SOLUTION MOVING FORWARD! 
-For now, we will need to copy these following files as described below:
+Before you begin .... 
 
 ```
-Make sure you have copied the  trustedcerts.pem file from your viya environment into the  sas-validation-scenarios/framework/execution/common/ folder. Also make sure the file is named "trustedcerts.pem" 
-Make sure you have copied the config.json file with a definition for the default profile into the sas-validation-scenarios/framework/execution/common/ folder. Also make sure the file is named "config.json" 
-Copy the sas programs in the resources folder to the sas-validation-scenarios/framework/execution/common/ folder.
-     cd sas-validation-scenarios
-     cp sas-validation-scenarios/validation-scenarios/scenarios/sas-viya-cli/resources/*.sas sas-validation-scenarios/framework/execution/common
-Make sure you have the path to the trustedcerts.pem file correctly defined in teh global-config.yaml file.
+- Make sure you have copied the trustedcerts.pem file from your viya environment into the  sas-validation-scenarios/framework/execution/common/ folder 
+- Also make sure the file is named "trustedcerts.pem" 
+- Make sure you have copied the config.json file with a definition for the default profile into the sas-validation-scenarios/framework/execution/common/ folder
+- Also make sure the file is named "config.json" 
+- Make sure you have the path to the trustedcerts.pem file correctly defined in the global-config.yaml file
+
 ```
 
-Generating Workload and running the sas-viya-cli scenario
+**Generating Workload and running the sas-viya-cli scenario:**
 
 ```
 cd sas-validation-scenarios/validation-scenarios
@@ -81,11 +80,11 @@ cd sas-validation-scenarios/validation-scenarios
 # Monitoring sas-viya cli jobs and getting results of test execution
 You will need to have an install of sas-viya cli to monitor the jobs running via the sas-validation-framework. 
 
-If you are new to sas-viya command line interface, refer to this doc to get started:
+# sas-viya cli scenarios list
 
-| testcase        | Details                              | sas program | resources | 
+| testcase        | Details                              | sas program | resources/inputdata | 
 |------------------|---------------------------------------------|----------|---------| 
-| **test.py** | Runs batch sas program which does a sleep for 120 sec | test.sas | None |     
+| **test.py** | **test.sas** | Runs test.sas program in batch which does a sleep for 120 sec | None |     
 
 
 https://go.documentation.sas.com/doc/en/sasadmincdc/v_064/calcli/titlepage.htm
