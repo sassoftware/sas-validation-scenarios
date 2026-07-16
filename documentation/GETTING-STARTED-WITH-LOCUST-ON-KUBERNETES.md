@@ -112,19 +112,30 @@ git checkout tags/<viya-release>
 
 **Step 3:** Deploy the locust-k8s-operator in your testing namespace as follows:
 
-  ```
-  cd sas-validation-scenarios/framework/locust-k8s/
-  
-  export KUBECONFIG=$myAdminKubeConfigFile
-  export TESTINGNAMESPACE=testing
+This guide provides comprehensive instructions for deploying the Locust Kubernetes Operator using its official Helm chart.
 
-  ./install-locust-k8s-operator.sh $TESTINGNAMESPACE $KUBECONFIG
+**Note:** Make sure [Helm 3](https://helm.sh/docs/intro/install/)) is installed on your local machine.
 
-  # You can run the following script to list all the resources that were just created
-  ./list-locust-k8s-operator.sh $TESTINGNAMESPACE $KUBECONFIG
+`cd sas-validation-scenarios/framework/locust-k8s/`
 
-  # If you need to uninstall, run -> ./uninstall-locust-k8s-operator.sh $TESTINGNAMESPACE $KUBECONFIG
-  ```
+First, add the Locust Kubernetes Operator Helm repository to your local Helm client:
+
+> `helm repo add locust-k8s-operator https://abdelrhmanhamouda.github.io/locust-k8s-operator/`
+
+Next, update your local chart repository cache to ensure you have the latest version:
+
+> `helm repo update`
+
+You can install the chart with a release name of your choice (e.g., locust-operator). Here are some important point to note: 
+
+- We are pinning down the version of the locust-operator to 2.2.3
+- We are also using a locust config file called locust-config.yaml which resides in this dorectory to set the cpu and mem limits and requests. 
+
+
+Default Installation: To install the chart with the default configuration, run:
+
+> `helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml --n testing`
+
 
 **Additional notes**
 
@@ -133,15 +144,15 @@ When you create the locust-operator these are the resources that gets created on
 ```
 Globally scoped resources:
 - customresourcedefinition.apiextensions.k8s.io/locusttests.locust.io                                     
-- clusterrole.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator  
-- clusterrolebinding.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator 
+- clusterrole.rbac.authorization.k8s.io/locust-operator  
+- clusterrolebinding.rbac.authorization.k8s.io/locust-operator
 
 Namespace scoped resources:
 - serviceaccount/default  
-- serviceaccount/locust-operator-locust-k8s-operator
-- role.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator
-- rolebinding.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator
-- deployment.apps/locust-operator-locust-k8s-operator 
+- serviceaccount/locust-operator
+- role.rbac.authorization.k8s.io/locust-operator
+- rolebinding.rbac.authorization.k8s.io/locust-operator
+- deployment.apps/locust-operator 
 
 ```
 
