@@ -105,7 +105,7 @@ git checkout tags/<viya-release>
   
 **Step 2:** Create a namespace called "testing".
 
-  `kubectl create ns testing`
+  > **`kubectl create ns testing`**
   
   NOTE: If you are using a shared k8s cluster where many different teams use the cluster to run load tests against various Viya environments such as for LoadGen (i.e. where the locust "virtual users" run), then it is recommended to uniquely name this namespace such as "team1tests", "team2tests" etc so as not to step on each other's environments.   
   
@@ -114,30 +114,30 @@ git checkout tags/<viya-release>
 
 This guide provides comprehensive instructions for deploying the Locust Kubernetes Operator using its official Helm chart.
 
-**Note:** Make sure [Helm 3](https://helm.sh/docs/intro/install/)) is installed on your local machine.
+**Note:** Make sure [Helm 3](https://helm.sh/docs/intro/install/) is installed on your local machine.
 
-`cd sas-validation-scenarios/framework/locust-k8s/`
+>**`cd sas-validation-scenarios/framework/locust-k8s/`**
 
 First, add the Locust Kubernetes Operator Helm repository to your local Helm client:
 
-> `helm repo add locust-k8s-operator https://abdelrhmanhamouda.github.io/locust-k8s-operator/`
+> **`helm repo add locust-k8s-operator https://abdelrhmanhamouda.github.io/locust-k8s-operator/`**
 
 Next, update your local chart repository cache to ensure you have the latest version:
 
-> `helm repo update`
+> **`helm repo update`**
 
 You can install the chart with a release name of your choice (e.g., locust-operator). Here are some important point to note: 
 
 - We are pinning down the version of the locust-operator to 2.2.3
-- We are also using a locust config file called locust-config.yaml which resides in this dorectory to set the cpu and mem limits and requests. 
+- We are also using a locust config file called locust-config.yaml (which resides in this directory) to set the cpu and mem limits and requests. 
 
 
 Default Installation: To install the chart with the default configuration, run:
 
-> `helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml --n testing`
+> **`helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml --n testing`**
 
 
-**Additional notes**
+**Additional locust-operator notes**
 
 When you create the locust-operator these are the resources that gets created on your cluster: 
 
