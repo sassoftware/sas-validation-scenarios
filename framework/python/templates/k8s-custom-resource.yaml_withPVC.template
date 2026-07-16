@@ -1,0 +1,23 @@
+# This file was generated using template: k8s-custom-resource.yaml.template and will be overwritten.
+apiVersion: locust.io/v2
+kind: LocustTest
+metadata:
+  name: ${name}.test
+  namespace: $namespace
+spec:
+  image: sasvalidationscenarios.azurecr.io/loadtest-v1.2
+  testFiles:
+     configMapRef: ${config_map_name}   
+  master:
+    command: --locustfile /lotest/src/${task} --host ${hostname} --users ${users} --spawn-rate ${spawn_rate} --iterations=${iterations} --run-time=${run_time} --csv ${csv}
+  worker:
+    command: --locustfile /lotest/src/${task}
+    replicas: ${worker_replicas}
+  volumes:  # Define the volume
+    - name: test-data
+      persistentVolumeClaim:
+        claimName: test-data-pvc  # Must exist in same namespace
+  volumeMounts:  # Mount into pods
+    - name: test-data
+      mountPath: /data  # Access files at /data in containers
+      target: both      # Mount to both master and worker pods
