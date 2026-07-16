@@ -134,7 +134,7 @@ You can install the chart with a release name of your choice (e.g., locust-opera
 
 Default Installation: To install the chart with the default configuration, run:
 
-> **`helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml --n testing`**
+> **`helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml -n testing`**
 
 
 **Additional locust-operator notes**
