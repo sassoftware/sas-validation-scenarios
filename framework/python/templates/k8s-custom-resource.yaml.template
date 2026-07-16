@@ -13,11 +13,3 @@ spec:
   worker:
     command: --locustfile /lotest/src/${task}
     replicas: ${worker_replicas}
-  volumes:  # Define the volume
-    - name: test-data
-      persistentVolumeClaim:
-        claimName: test-data-pvc  # Must exist in same namespace
-  volumeMounts:  # Mount into pods
-    - name: test-data
-      mountPath: /data  # Access files at /data in containers
-      target: both      # Mount to both master and worker pods:q!
