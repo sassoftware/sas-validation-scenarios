@@ -193,21 +193,22 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: test-data-pvc
+  namespace: testing
 spec:
   accessModes:
-    - ReadOnlyMany  # Multiple pods can read
+    - ReadOnlyMany
+  storageClassName: azurefile-csi # Change this to values that match your env
   resources:
     requests:
-      storage: 10Gi
+      storage: 2Gi # Adjust size as needed
+
 ```
 
 
 
 
 #### StorageClass compatibility Note:  
-Not all StorageClasses support ReadOnlyMany (ROX) access mode. Check your cluster's StorageClass documentation to confirm ROX support before using this access mode.
-
-For eg: In azure for my env, I had to specify the   "storageClassName: azurefile-csi" instead of going with the default. 
+Not all StorageClasses support ReadOnlyMany (ROX) access mode. Check your cluster's StorageClass documentation to confirm ROX support before using this access mode. You may have to use a different storageclass name based on your cluster environment. 
 
 Then, add this piece of code to the k8-cr-resource:
 
