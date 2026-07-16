@@ -5,8 +5,8 @@ LOCUSTRESOURCELIST=$$( kubectl -n $namespace get locusttests.locust.io,pod 2>/de
 
 #### Start
 
-MMM1=$$( kubectl -n $namespace get pod -l locust.io/\role='master' --no-headers )
-WWW1=$$( kubectl -n $namespace get pod -l locust.io/\role='worker' --no-headers )
+MMM1=$$( kubectl -n $namespace get pod -l role='master' --no-headers )
+WWW1=$$( kubectl -n $namespace get pod -l role='worker' --no-headers )
 MMM2=$$( echo "$$MMM1" | awk '{print $$1"_"$$2"_"$$3"_"$$5}' ); MMM2=$$( echo $$MMM2 )
 WWW2=$$( echo "$$WWW1" | awk '{print $$1"_"$$2"_"$$3"_"$$5}' ); WWW2=$$( echo $$WWW2 )
 MASTRPOD=$$( echo "$$MMM1" | grep '2/2' | awk '{print $$1}')
