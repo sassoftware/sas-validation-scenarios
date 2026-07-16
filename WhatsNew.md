@@ -1,5 +1,7 @@
 # What's New in each releases?
 
+## 2026.05
+
 ## 2026.04 (BREAKING CHANGES)
 <details>
   <summary> Upgrade to Locust kubernetes operator 2.2.3</summary>
