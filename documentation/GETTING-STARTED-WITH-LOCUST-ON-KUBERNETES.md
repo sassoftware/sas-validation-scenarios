@@ -6,6 +6,7 @@
 - [Preparing the environment](#preparing-the-environment)
   - [Installing the Locust Kubernetes Operator](#installing-the-locust-kubernetes-operator)
   - [Configuring the Viya environment](#configuring-the-viya-environment)
+  - [Optional: Mount volumes to locust master and worker pods](#optional-mount-volumes-to-locust-master-and-worker-pods)
   - [Optional: Creating a dedicated nodepool](#optional-creating-a-dedicated-nodepool)
   - [Defining Test Users](#defining-test-users)
 - [Providing User Credentials](#providing-user-credentials)
@@ -84,7 +85,7 @@ for package_name in packages:
 
 ## Preparing the environment
 
-### Installing the Locust Kubernetes Operator
+### Installing the Locust Kubernetes Operator version 2.2.3
 Before you start running the tests, we need to install the Locust Kubernetes Operator.   
 
 **Step 1:** Clone the project using the appropriate Viya release and Git repository location:
@@ -179,6 +180,48 @@ Before running validation scenarios, make sure to disable the welcome screen and
     disableAutoOpenWhatsNew: true
     disableWelcomeScreens: true
    ```
+
+## Optional: Mount volumes to locust master and worker pods
+
+This version of locust operator has the ability to mount shared PVC storage to the locust pods/containers so that locust can directly write output files (logs, sas-viya-cli output etc) directly to this mount. The /data is available as a mount point on all locust master and worker pods.
+
+
+### Create the PVC first:
+
+```
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-data-pvc
+spec:
+  accessModes:
+    - ReadOnlyMany  # Multiple pods can read
+  resources:
+    requests:
+      storage: 10Gi
+```
+
+
+
+
+#### StorageClass compatibility Note:  
+Not all StorageClasses support ReadOnlyMany (ROX) access mode. Check your cluster's StorageClass documentation to confirm ROX support before using this access mode.
+
+For eg: In azure for my env, I had to specify the   "storageClassName: azurefile-csi" instead of going with the default. 
+
+Then, add this piece of code to the k8-cr-resource:
+
+ ```
+ volumes:  # Define the volume
+    - name: test-data
+      persistentVolumeClaim:
+        claimName: test-data-pvc  # Must exist in same namespace
+  volumeMounts:  # Mount into pods
+    - name: test-data
+      mountPath: /data  # Access files at /data in containers
+      target: both      # Mount to both master and worker pods
+```
+
 
 ## Optional: Creating a dedicated nodepool
 
