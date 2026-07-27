@@ -28,6 +28,9 @@ class st_analystoptimizeflow(PlaywrightUser):
         if len(usernames) == 0:
             self.logger.info(f"No more users in the list, exiting as success")
             exit(0)
+        else:
+            self.logger.info(f"User list: {usernames}")
+
 
         user_ray = usernames.pop(random.randrange(len(usernames)))
         user = user_ray[0]
@@ -65,16 +68,16 @@ class st_analystoptimizeflow(PlaywrightUser):
         async with event(self,"04: Run Data Flow"):
           try:
             self.logger.info(f"Starting to Run Data Flow")
-            self.logger.info(f'Starting to open flow_from_analyst_optimize.flw')
+            self.logger.info(f'Starting to open Example_Flow_with_Data.flw')
             await page.get_by_test_id("appHeaderToolbar-open").click()
             await page.get_by_role("button", name="SAS Folders SAS Content").dblclick()
             await page.get_by_test_id("explorer-dialog-folder-tree").get_by_text("SAS Content").dblclick()
             await page.get_by_test_id("member-list-grid-wrapper").get_by_text("Public").dblclick()
-            await page.get_by_test_id("member-list-grid-wrapper").get_by_text("flow_from_analyst_optimize.flw").click()
+            await page.get_by_test_id("member-list-grid-wrapper").get_by_text("Example_Flow_with_Data.flw").click()
             await page.get_by_test_id("file-folder-dialog-firstButton").click()
-            self.logger.info(f"Finished opening flow_from_analyst_optimize.flw program")
-            self.logger.info(f"Data Flow: flow_from_analyst_optimize.flw successfully opened")
-            await page.get_by_test_id("tab-2").get_by_text("flow_from_analyst_optimize.flw").click()
+            self.logger.info(f"Finished opening Example_Flow_with_Data.flw program")
+            self.logger.info(f"Data Flow: Example_Flow_with_Data.flw successfully opened")
+            await page.get_by_test_id("tab-2").get_by_text("Example_Flow_with_Data.flw").click()
             await page.get_by_test_id("flowtoolbar-runButton").click()
             self.logger.info(f"Clicked on Run to run the data flow")
             time.sleep(3)
@@ -82,9 +85,9 @@ class st_analystoptimizeflow(PlaywrightUser):
             await expect(page.get_by_test_id("flowtoolbar-runButton")).to_be_visible(timeout=120000)
             self.logger.info(f"Data Flow progress bar is no longer visible")
             #await page.locator("iframe[title=\"SAS® Studio\"]").content_frame.get_by_role("tab", name="Submitted Code and Results").locator("div").nth(1).click()
-            self.logger.info(f"Finished Runing flow_from_analyst_optimize Data Flow")
+            self.logger.info(f"Finished Runing Example_Flow_with_Data.flw")
           except:
-            await exception_handling(f"Failed to run flow_from_analyst_optimize Data Flow", user)
+            await exception_handling(f"Failed to run Example_Flow_with_Data.flw", user)
             raise
 
         async with event(self, "04: Signing Out"):

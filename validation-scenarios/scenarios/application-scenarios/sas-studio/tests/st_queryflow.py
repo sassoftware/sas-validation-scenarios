@@ -67,11 +67,9 @@ class st_queryflow(PlaywrightUser):
             self.logger.info(f"Starting to Run Data Flow")
             self.logger.info(f'Starting to open queryflow.flw')
             await page.get_by_test_id("appHeaderToolbar-open").click()
+
             await page.get_by_role("button", name="SAS Folders SAS Content").dblclick()
-
-            await page.get_by_role("rowgroup").filter(has_text="My FolderMy FavoritesFolder").click()
-            await page.get_by_test_id("explorer-dialog-folder-tree").get_by_text("SAS Content", exact=True).first.dblclick()
-
+            await page.get_by_test_id("explorer-dialog-folder-tree").get_by_text("SAS Content").dblclick()
             await page.get_by_test_id("member-list-grid-wrapper").get_by_text("Public").dblclick()
             await page.get_by_test_id("member-list-grid-wrapper").get_by_text("queryflow.flw").click()
             await page.get_by_test_id("file-folder-dialog-firstButton").click()

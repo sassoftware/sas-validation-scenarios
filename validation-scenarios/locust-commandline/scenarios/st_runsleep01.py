@@ -75,10 +75,7 @@ class st_runsleep01(PlaywrightUser):
             self.logger.info(f"Opening sleep_20.sas program")
             await page.get_by_test_id("appHeaderToolbar-open").click()
             await page.get_by_role("button", name="SAS Folders SAS Content").dblclick()
-            
-            await page.get_by_role("rowgroup").filter(has_text="My FolderMy FavoritesFolder").click()
-            await page.get_by_test_id("explorer-dialog-folder-tree").get_by_text("SAS Content", exact=True).first.dblclick()
-
+            await page.get_by_test_id("explorer-dialog-folder-tree").get_by_text("SAS Content").dblclick()
             await page.get_by_test_id("member-list-grid-wrapper").get_by_text("Public").dblclick()
             await page.get_by_test_id("member-list-grid-wrapper").get_by_text("sleep_20.sas").click()
             await page.get_by_test_id("file-folder-dialog-firstButton").click()

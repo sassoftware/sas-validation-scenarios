@@ -27,7 +27,7 @@ class va_simplecreate01(PlaywrightUser):
       if len(usernames) == 0:
           self.logger.info(f"No more users in the list, exiting as success")
           exit(0)
-        
+ 
       user_ray = usernames.pop(random.randrange(len(usernames)))
       user = user_ray[0]
       password = user_ray[1]
@@ -52,14 +52,11 @@ class va_simplecreate01(PlaywrightUser):
           self.logger.info(f"Start: Creating New Report and Adding Data")
           time.sleep(5)
           await expect(page.get_by_text("Explore and Visualize", exact=True)).to_be_visible(timeout=30000)
-          #await expect(page.locator('[aria-label="SAS Content"]')).to_be_visible(timeout=20000)
-          self.logger.info(f"newReport click")
+          #await expect(page.locator('[aria-label="SAS Content"]')).to_be_visible()
           await page.get_by_test_id("newReportFromHome").click()
-          await expect(page.get_by_test_id("dataPane")).to_be_visible(timeout=20000)
-          self.logger.info(f"Selecting to add data")
+          await expect(page.get_by_test_id("dataPane")).to_be_visible()
           await page.get_by_text("Select to add data").click()
-          await expect(page.get_by_text("Name")).to_be_visible(timeout=30000)
-          self.logger.info(f"Searching for CLASS data")
+          await expect(page.get_by_text("Name")).to_be_visible()
           await page.locator('[placeholder="Search all data"]').fill("CLASS")
           self.logger.info(f"Searching for CLASS data")
           await page.get_by_label("Start search").click( )

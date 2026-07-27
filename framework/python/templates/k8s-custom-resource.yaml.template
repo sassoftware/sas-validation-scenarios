@@ -1,19 +1,24 @@
 # This file was generated using template: k8s-custom-resource.yaml.template and will be overwritten.
-apiVersion: locust.io/v2
+apiVersion: locust.io/v1
 kind: LocustTest
 metadata:
   name: ${name}.test
   namespace: $namespace
 spec:
   image: sasvalidationscenarios.azurecr.io/loadtest-v1.2
-  testFiles:
-     configMapRef: ${config_map_name}   
-  master:
-    command: --locustfile /lotest/src/${task} --host ${hostname} --users ${users} --spawn-rate ${spawn_rate} --iterations=${iterations} --run-time=${run_time} --csv ${csv}
-    labels:
-      role: master
-  worker:
-    command: --locustfile /lotest/src/${task}
-    replicas: ${worker_replicas}
-    labels:
-      role: worker
+  labels: 
+    master:
+      locust.io/role: "master"
+    worker:
+      locust.io/role: "worker"
+  masterCommandSeed:
+    --locustfile /lotest/src/${task}
+    --host ${hostname}
+    --users ${users}
+    --spawn-rate ${spawn_rate} 
+    --iterations=${iterations}
+    --run-time=${run_time}
+    --csv ${csv}
+  workerCommandSeed: --locustfile /lotest/src/${task}
+  workerReplicas: ${worker_replicas}
+  configMap: ${config_map_name}
