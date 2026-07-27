@@ -1,0 +1,19 @@
+workload-definitions:
+  workload-definition-specs:
+    - name: sas-insurance-cap-mgt
+      description: sas-insurance-cap-mgt scenarios
+      custom-resource-spec:
+        namespace: testing
+        config-map-name: sas-insurance-cap-mgt-map
+        k8s-operator: locust-k8s-operator.yaml
+        workloads:
+          - name: icmbatch
+            scenario-config: solution-scenarios/sas-insurance-cap-mgt/scenario-config.yaml
+            path: solution-scenarios/sas-insurance-cap-mgt/tests
+            task: icm_batch.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+        
