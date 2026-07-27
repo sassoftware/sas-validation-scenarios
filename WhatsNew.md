@@ -15,7 +15,6 @@ And in addition a locust_pvc.yaml file has been added to create the pvc to mount
 
 <details>
   <summary> Insurance Capital Management (ICM) scenario added </summary>
-A new solution scenario that targets sas-viya batch cli has been added in this release. For more details refer to the ICM_Readme.md doc.
-[](./validation-scenarios/scenarios/solution-scenarios/sas-insurance-cap-mgt/ICM_Readme.md))
+A new solution scenario that targets sas-viya batch cli has been added in this release. For more details refer to the [ICM_Readme.md](./validation-scenarios/scenarios/solution-scenarios/sas-insurance-cap-mgt/ICM_Readme.md))
 </details>
 
