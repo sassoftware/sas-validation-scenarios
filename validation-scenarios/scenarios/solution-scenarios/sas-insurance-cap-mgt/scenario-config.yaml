@@ -24,10 +24,11 @@ scenario-config:
       file: scenario_utils.py  
     - type: resource
       path: resources
-      file: test.sas
+      file: icm_batch.sas
     - type: cli-profile
       path: framework/execution/common
       file: config.json
     - type: trusted-certs
       path: framework/execution/common
       file: trustedcerts.pem
+
