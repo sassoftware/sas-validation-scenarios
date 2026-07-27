@@ -11,6 +11,7 @@ Updates or adjustments are implemented and maintained within the associated bran
 
 | Project Branch | Compatible Viya Release/Cadence |
 |:--------------:|:-------------------------------:|
+| 2026.05 | 2026.05 |
 | 2026.04 | 2026.04 |
 | 2026.03 | 2026.03 |
 | 2026.02 | 2026.02 |
