@@ -46,13 +46,12 @@ class sasviyacli_batch(PlaywrightUser):
           subprocess.run('cat /root/.sas/config.json', shell = True)
           subprocess.run('echo export SSL_CERT_FILE=/home/locust/trustedcerts.pem', shell = True)
           print(f"User: {user} is validating to sas viya cli")
-          command = f"SSL_CERT_FILE=/home/locust/trustedcerts.pem /root/sas-viya --profile Default authenticate login -u {user} -p {password}"
+          command = f"SSL_CERT_FILE=/home/locust/trustedcerts.pem /root/sas-viya --profile Default authenticate login -u {user} -p {user}"
           subprocess.run(command, shell=True)     
  
           subprocess.run('echo SUCCESSFUL', shell = True)
           print(f"User: {user} succesfully validated to sas viya cli")
-  
-          result = subprocess.run(f'SSL_CERT_FILE=/home/locust/trustedcerts.pem /root/sas-viya batch jobs submit-pgm -c default --job-name test --wait-results --rem-pgm-path test.sas --job-file test.sas --results-dir /data --sas-option "-sysparm {user}"', shell=True)
+          result = subprocess.run('SSL_CERT_FILE=/home/locust/trustedcerts.pem /root/sas-viya batch jobs submit-pgm -c default --job-name test --wait-results --rem-pgm-path test.sas --job-file test.sas --results-dir /tmp', shell=True)
           print(f"Command output: {result.stdout}")
           if result.returncode != 0:
              print(f"Command exited with code: {result.returncode}")

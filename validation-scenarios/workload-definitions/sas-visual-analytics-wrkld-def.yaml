@@ -16,3 +16,22 @@ workload-definitions:
             spawn-rate: 3
             iterations: 1
             worker-replicas: 1
+          - name: vs-simplecreate01
+            scenario-config: application-scenarios/sas-visual-analytics/scenario-config.yaml
+            path: application-scenarios/sas-visual-analytics/tests
+            task: vs_simplecreate01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+          - name: vdmml-simplecreate01
+            scenario-config: application-scenarios/sas-visual-analytics/scenario-config.yaml
+            path: application-scenarios/sas-visual-analytics/tests
+            task: vdmml_simplecreate01.py
+            csv: stats.csv
+            users: 1
+            spawn-rate: 3
+            iterations: 1
+            worker-replicas: 1
+
