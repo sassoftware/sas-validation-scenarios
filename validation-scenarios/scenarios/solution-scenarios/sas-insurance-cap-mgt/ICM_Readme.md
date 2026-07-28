@@ -5,6 +5,10 @@ ________________________________________
 -	Install the required Python packages for the SAS Insurance Capital Management (ICM) deployment by downloading the package from the specified location. 
 **../../../resources/solutions/ICM**
 
+Place this Python ZIP file in the site-config directory (this is the same location where the other deployment configuration files are stored for example: LDAP configuration files, tuning settings and other deployment-related files). This ZIP file contains all the required Python dependency packages.
+
+During the Viya 4 deployment phase, the deployment process automatically retrieves the Python Prerequisites ZIP file from the configuration location and installs the required dependencies, ensuring that all Python prerequisites are available for a successful deployment. 
+
 **2. Environment Deployment**
 -	Deploy a SAS Viya environment using standard deployment automation process.
 -	Ensure the following solution components are included during deployment.
