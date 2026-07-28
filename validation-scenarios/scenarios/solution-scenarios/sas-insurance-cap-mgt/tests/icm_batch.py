@@ -20,7 +20,7 @@ class sasviyacli_batch(PlaywrightUser):
     TIMEOUT_LONG =  60000
 
     
-    cadence = "2026.05"
+    cadence = "2026.06"
     loopcount = "1"
 
 
