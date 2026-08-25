@@ -6,6 +6,7 @@
 - [Preparing the environment](#preparing-the-environment)
   - [Installing the Locust Kubernetes Operator](#installing-the-locust-kubernetes-operator)
   - [Configuring the Viya environment](#configuring-the-viya-environment)
+  - [Optional: Mount volumes to locust master and worker pods](#optional-mount-volumes-to-locust-master-and-worker-pods)
   - [Optional: Creating a dedicated nodepool](#optional-creating-a-dedicated-nodepool)
   - [Defining Test Users](#defining-test-users)
 - [Providing User Credentials](#providing-user-credentials)
@@ -84,7 +85,7 @@ for package_name in packages:
 
 ## Preparing the environment
 
-### Installing the Locust Kubernetes Operator
+### Installing the Locust Kubernetes Operator version 2.2.3
 Before you start running the tests, we need to install the Locust Kubernetes Operator.   
 
 **Step 1:** Clone the project using the appropriate Viya release and Git repository location:
@@ -105,43 +106,54 @@ git checkout tags/<viya-release>
   
 **Step 2:** Create a namespace called "testing".
 
-  `kubectl create ns testing`
+  > **`kubectl create ns testing`**
   
   NOTE: If you are using a shared k8s cluster where many different teams use the cluster to run load tests against various Viya environments such as for LoadGen (i.e. where the locust "virtual users" run), then it is recommended to uniquely name this namespace such as "team1tests", "team2tests" etc so as not to step on each other's environments.   
   
 
 **Step 3:** Deploy the locust-k8s-operator in your testing namespace as follows:
 
-  ```
-  cd sas-validation-scenarios/framework/locust-k8s/
-  
-  export KUBECONFIG=$myAdminKubeConfigFile
-  export TESTINGNAMESPACE=testing
+This guide provides comprehensive instructions for deploying the Locust Kubernetes Operator using its official Helm chart.
 
-  ./install-locust-k8s-operator.sh $TESTINGNAMESPACE $KUBECONFIG
+**Note:** Make sure [Helm 3](https://helm.sh/docs/intro/install/) is installed on your local machine.
 
-  # You can run the following script to list all the resources that were just created
-  ./list-locust-k8s-operator.sh $TESTINGNAMESPACE $KUBECONFIG
+>**`cd sas-validation-scenarios/framework/locust-k8s/`**
 
-  # If you need to uninstall, run -> ./uninstall-locust-k8s-operator.sh $TESTINGNAMESPACE $KUBECONFIG
-  ```
+First, add the Locust Kubernetes Operator Helm repository to your local Helm client:
 
-**Additional notes**
+> **`helm repo add locust-k8s-operator https://abdelrhmanhamouda.github.io/locust-k8s-operator/`**
+
+Next, update your local chart repository cache to ensure you have the latest version:
+
+> **`helm repo update`**
+
+You can install the chart with a release name of your choice (e.g., locust-operator). Here are some important point to note: 
+
+- We are pinning down the version of the locust-operator to 2.2.3
+- We are also using a locust config file called locust-config.yaml (which resides in this directory) to set the cpu and mem limits and requests. 
+
+
+Default Installation: To install the chart with the default configuration, run:
+
+> **`helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml -n testing`**
+
+
+**Additional locust-operator notes**
 
 When you create the locust-operator these are the resources that gets created on your cluster: 
 
 ```
 Globally scoped resources:
 - customresourcedefinition.apiextensions.k8s.io/locusttests.locust.io                                     
-- clusterrole.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator  
-- clusterrolebinding.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator 
+- clusterrole.rbac.authorization.k8s.io/locust-operator  
+- clusterrolebinding.rbac.authorization.k8s.io/locust-operator
 
 Namespace scoped resources:
 - serviceaccount/default  
-- serviceaccount/locust-operator-locust-k8s-operator
-- role.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator
-- rolebinding.rbac.authorization.k8s.io/locust-operator-locust-k8s-operator
-- deployment.apps/locust-operator-locust-k8s-operator 
+- serviceaccount/locust-operator
+- role.rbac.authorization.k8s.io/locust-operator
+- rolebinding.rbac.authorization.k8s.io/locust-operator
+- deployment.apps/locust-operator 
 
 ```
 
@@ -168,6 +180,49 @@ Before running validation scenarios, make sure to disable the welcome screen and
     disableAutoOpenWhatsNew: true
     disableWelcomeScreens: true
    ```
+
+## Optional: Mount volumes to locust master and worker pods
+
+This version of locust operator has the ability to mount shared PVC storage to the locust pods/containers so that locust can directly write output files (logs, sas-viya-cli output etc) directly to this mount. The /data is available as a mount point on all locust master and worker pods.
+
+
+### Create the PVC first:
+
+```
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-data-pvc
+  namespace: testing
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: azurefile-csi # Change this to values that match your env
+  resources:
+    requests:
+      storage: 2Gi # Adjust size as needed
+
+```
+
+
+
+
+#### StorageClass compatibility Note:  
+Not all StorageClasses support ReadOnlyMany (ROX) access mode. Check your cluster's StorageClass documentation to confirm ROX support before using this access mode. You may have to use a different storageclass name based on your cluster environment. 
+
+Then, add this piece of code to the k8-cr-resource:
+
+ ```
+ volumes:  # Define the volume
+    - name: test-data
+      persistentVolumeClaim:
+        claimName: test-data-pvc  # Must exist in same namespace
+  volumeMounts:  # Mount into pods
+    - name: test-data
+      mountPath: /data  # Access files at /data in containers
+      target: both      # Mount to both master and worker pods
+```
+
 
 ## Optional: Creating a dedicated nodepool
 
