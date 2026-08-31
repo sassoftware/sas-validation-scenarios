@@ -14,8 +14,8 @@ For example, running a **Visual Analytics** test case without the associated rep
 
 | testcase        | Description                              | data  | SAS Content |  Approx runtime  
 |------------------|---------------------------------------------|----------|------- | -------|
-| **logonoff.py** | Logs on/off from SASLogon | None |  None  |      | 
-| **createcompute.py** | Creates a compute session in SAS Studio | None | None |   | 
+| **logonoff.py** | Logs on/off from SASLogon | None |  None  |   6 sec   | 
+| **createcompute.py** | Creates a compute session in SAS Studio | None | None |  28 sec | 
 
 ### helloviya-advanced 
 
