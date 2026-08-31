@@ -77,6 +77,11 @@ def on_test_start(environment, **_kwargs):
             data = users[start_index:end_index]
             environment.runner.send_message("test_users", data, worker)
 
+    elif not isinstance(environment.runner, WorkerRunner):
+        # LocalRunner: single process, no workers to message — use all users directly
+        usernames.extend(map(lambda u: u, user_list))
+
+
 @events.quitting.add_listener
 def _(environment, **kw):
     if environment.stats.total.fail_ratio > 0.01:
