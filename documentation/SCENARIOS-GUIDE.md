@@ -24,9 +24,9 @@ SAS viya aplications and makes sure applications are alive and well.
 
 | testcase        | Details                              | data   | SAS Content |  Approx runtime |
 |------------------|---------------------------------------------|----------|------- | ------|
-| **st_runsleep01.py** | Runs sas sleep program for 30 sec | None  | sleep_20.sas |      |
-| **st_runsleep02.py** | Runs sas sleep program for 60 sec | None | sleep_40.sas |   |
-| **va_simplecreate01** | Creates a simple VA report using class data set |  class.csv  | None |    | 
+| **st_runsleep01.py** | Runs sas sleep program for 30 sec | None  | sleep_20.sas |  53 sec    |
+| **st_runsleep02.py** | Runs sas sleep program for 60 sec | None | sleep_40.sas |  72 sec |
+| **va_simplecreate01** | Creates a simple VA report using class data set |  class.csv  | None | 24 sec   | 
 
 ### SAS Studio  
 
@@ -34,19 +34,18 @@ Before you run this scenario, please makes sure to go to the resources section a
 
 | testcase        | Details                              | data | SAS Content |  Approx runtime | 
 |------------------|---------------------------------------------|----------|------| ----- | 
-| **st_runsleep01.py** | Runs sas sleep program for 20 sec | None  |   sleep_20.sas |   |
-| **st_runsleep02.py** | Runs sas sleep program for 40 sec | None | sleep_40.sas |    |
-| **st_analystoptimizeflow.py** | Runs Data Flow flow_from_analyst_optimize.flw Runs for about 2-3 min  |  None (uses sashelp data) | flow_from_analyst_optimize.flw |  | 
-|**st_queryflow.py**  | Runs Data Flow queryFlow.flw Runs for about 3-4 min  | None (uses sashelp data). | queryFlow.flw  |    |
-|**st_40nodesflow.py** | Runs Data Flow 40nodes.flw Runs for about 3-4 min. | None (uses sashelp data) | 40nodes.flw.  |.   | 
+| **st_runsleep01.py** | Runs sas sleep program for 20 sec | None  |   sleep_20.sas |  53 sec |
+| **st_runsleep02.py** | Runs sas sleep program for 40 sec | None | sleep_40.sas |  72 sec  |
+| **st_analystoptimizeflow.py** | Runs Data Flow flow_from_analyst_optimize.flw Runs for about 2-3 min  |  None (uses sashelp data) | flow_from_analyst_optimize.flw | 2.34 min | 
+|**st_queryflow.py**  | Runs Data Flow queryFlow.flw Runs for about 3-4 min  | None (uses sashelp data). | queryFlow.flw  | 3.33 min   |
+|**st_40nodesflow.py** | Runs Data Flow 40nodes.flw Runs for about 3-4 min. | None (uses sashelp data) | 40nodes.flw.  | 3.48 min  | 
 
 ### Visual Analytics 
 
 | testcase        | Details                              | data  | SAS Content  |   Approx runtime | 
 |------------------|---------------------------------------------|----------|-------|----- | 
-| **va_simplecreate01** | Creates a simple VA report using class data set |  class.csv | None |    | 
-| **vdmml_simplecreate01.py** | validates vdmml features using Gradient Boosting, Forest, Neural Network | gendata01M_01_visual_0101_vars.sashdat |  None  |  | 
-| **vs_simplecreate01.py** | validates Visual Statistics features using regselect, logselect, glmselect and dtree | reg_simtbl_vsbench_200M.sashdat  |  None |    |   
+| **va_simplecreate01** | Creates a simple VA report using class data set |  class.csv | None |  24 sec  | 
+  
 
 ## Resource-Setup
 
