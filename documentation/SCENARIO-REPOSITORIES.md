@@ -7,7 +7,7 @@ projects that publish Releases). This document covers:
 2. [The specification for a plugin release package](#part-2---release-package-specification): what the
    archive must contain, how it must be packaged, and how to publish it.
 
-For day-to-day command usage see [README.md](../README.md).
+For day-to-day command usage see [CLI-CHEATSHEET.md](../CLI-CHEATSHEET.md).
 
 ---
 

@@ -59,4 +59,4 @@ Workflow commands remain top-level because they describe an end-to-end operation
 
 `resolve`, `prepare`, and `generate` from the argparse-era sketch were removed in the
 Typer-based CLI redesign; `generate`'s behavior is folded into `run`. See
-[README.md](README.md) for full usage.
+[CLI-CHEATSHEET.md](CLI-CHEATSHEET.md) for full usage.
