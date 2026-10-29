@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description="Argument parser")
 
 # Add named arguments
 parser.add_argument("-t", "--template", type=str, help="Custom Resource template file", required=True)
-parser.add_argument("-a", "--artifactPath", type=str, help="Artifacts path", required=True)
+parser.add_argument("-r", "--resourcesPath", type=str, help="Resources path", required=True)
 
 # Parse the arguments
 args = parser.parse_args()
@@ -27,7 +27,7 @@ frameworkResourcesLocation = os.getenv("frameworkScriptsLocationFullPath")
 hostname = os.getenv("hostname")
 custom_resource_spec = os.getenv("customResourceSpec")
 
-print(f"Artifacts Path: {args.artifactPath}")
+print(f"Resources Path: {args.resourcesPath}")
 
 # Load the workload as a dictionary
 custom_resource_spec_dict = json.loads(custom_resource_spec)
@@ -75,6 +75,6 @@ for workload in workloads:
 
   k8s_cr_doc = k8s_cr_template.substitute(name=workload_name, task=workload_task, hostname=hostname, k8s_operator=k8s_operator_name, namespace=namespace, users=workload_users, spawn_rate=workload_spawn_rate, 
                                           iterations=workload_iterations, csv=workload_csv, worker_replicas=workload_worker_replicas, config_map_name=config_map_name, run_time=workload_run_time)
-  print(f"file name is {args.artifactPath}/k8s-cr-{workload_name}.yaml")
-  with open(os.path.join(args.artifactPath, "k8s-cr-" + workload_name + ".yaml"), "w") as file:
+  print(f"file name is {args.resourcesPath}/k8s-cr-{workload_name}.yaml")
+  with open(os.path.join(args.resourcesPath, "k8s-cr-" + workload_name + ".yaml"), "w") as file:
     file.write(k8s_cr_doc)

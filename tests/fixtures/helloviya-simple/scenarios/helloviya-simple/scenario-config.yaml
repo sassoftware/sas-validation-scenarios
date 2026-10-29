@@ -1,0 +1,20 @@
+scenario-config:
+  name: hello-viya-simple
+  description: Simple logon and logoff test using saslogon
+  dependencies:
+    - type: common
+      path: framework/execution/common
+      file: events.py
+    - type: common
+      path: framework/execution/common
+      file: auth.py
+    - type: common
+      path: framework/execution/common
+      file: exception.py
+    - type: common
+      path: framework/execution/common
+      file: scenario_utils.py
+    - type: common
+      path: framework/execution/common
+      file: studio_actions.py
+  entrypoints:

@@ -1,0 +1,9 @@
+schema-version: "1"
+name: hello-viya-scenarios
+version: 0.1.0
+viya-cadence: "2026.07"
+repository: sas-validation-github-mock
+
+scenarios:
+  - id: helloviya-simple
+    path: scenarios/helloviya-simple

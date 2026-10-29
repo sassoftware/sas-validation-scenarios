@@ -1,4 +1,6 @@
-# my-values.yaml
+# Helm values for locust-k8s-operator.yaml; after editing, re-render it from this directory with:
+# helm template locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml -n locust-operator > locust-k8s-operator.yaml
+# Keep '-n locust-operator': install-locust-k8s-operator.sh rewrites that namespace to its target at apply time.
 replicaCount: 2
 
 locustPods:

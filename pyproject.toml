@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sas-validation"
+version = "0.1.0"
+description = "SAS Viya validation scenario package tooling"
+requires-python = ">=3.9"
+dependencies = ["deepmerge>=2.0", "kubernetes>=29.0", "platformdirs>=4.0", "PyYAML>=6.0", "typer>=0.12"]
+
+[project.scripts]
+sas-validation = "scenario_package.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "framework/python"}
+
+[tool.setuptools.packages.find]
+where = ["framework/python"]

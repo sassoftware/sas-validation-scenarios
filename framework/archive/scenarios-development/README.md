@@ -2,7 +2,7 @@
 
 This section describes how to develop new scenarios and tests using Playwright and prepare them for Locust-based execution in this sas-validation-scenarios framework.
 
-Make sure you have prepared your environment folliwng the steps here in [Preparing your Client](https://gitlab.sas.com/aat/sas-validation-scenarios/-/tree/main?ref_type=heads#preparing-your-client)
+Make sure you have prepared your environment following the client preparation steps in the main project README.
 Specifically this section where you re-activate your python environment:
 
 `source $VALIDATION_PROJECT_PATH/bin/activate`
@@ -46,7 +46,7 @@ And the start of the task in your locust script would look like this:
 
 The auth module in the common module takes care of the authentication to SAS Viya web applications.
 
-Currently we have support for ldap and auth.sas.com used for engage envirponments. 
+Currently we have support for LDAP and external OIDC identity providers.
 
 ##### exception.py
 

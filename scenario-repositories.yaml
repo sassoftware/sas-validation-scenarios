@@ -1,0 +1,12 @@
+# Default repository for plugins install and plugins uninstall when --repo is omitted.
+# Override it per command with --repo <alias>.
+default-repository: gitlab-platform-scenarios
+
+# Plugin repository aliases used by the sas-validation plugins commands.
+scenario-repositories:  
+  gitlab-platform-scenarios:
+    provider: gitlab-release
+    repository: aat/sas-validation-scenarios-platform   # group/project path from your clone URL
+    visibility: private
+    base-url: https://gitlab.sas.com 
+

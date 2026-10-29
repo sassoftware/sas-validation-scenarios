@@ -22,6 +22,8 @@ from locust_plugins.csvreader import CSVReader
 from dotenv import load_dotenv, dotenv_values 
 import base64
 import json
+import threading
+
 
 from scenario_utils import UsersManager
 
@@ -32,6 +34,7 @@ test_users = UsersManager()
 user_list = test_users.get_user_list()
 
 usernames = [] # This list will be sent to each user chunked by the number of users, initialize as empty array
+usernames_lock = threading.Lock() # Protects usernames from concurrent pop() calls across simulated users
 
 def setup_test_users(environment, msg, **kwargs):
     # Fired when the worker receives a message of type 'test_users'
@@ -55,12 +58,11 @@ def on_locust_init(environment, **_kwargs):
     if not isinstance(environment.runner, WorkerRunner):
         environment.runner.register_message("acknowledge_users", on_acknowledge)
 
-
 @events.test_start.add_listener
 def on_test_start(environment, **_kwargs):
     # When the test is started, evenly divides list between
     # worker nodes to ensure unique data across threads
-    if not isinstance(environment.runner, WorkerRunner):
+    if isinstance(environment.runner, MasterRunner):
         users = user_list
 
         worker_count = environment.runner.worker_count
@@ -81,6 +83,7 @@ def on_test_start(environment, **_kwargs):
         # LocalRunner: single process, no workers to message — use all users directly
         usernames.extend(map(lambda u: u, user_list))
 
+    print(f"[DEBUG] on_test_start finished: usernames list has {len(usernames)} entries")
 
 @events.quitting.add_listener
 def _(environment, **kw):
