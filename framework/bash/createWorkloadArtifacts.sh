@@ -107,11 +107,12 @@ fi
 
 # Redirect stdout and stderr to a log file with a timestamp
 workloadBaseDir=$(dirname $workloadConfigFullPath)
-mkdir -p $workloadBaseDir/logs
+buildDir=$workloadBaseDir/build
+mkdir -p $buildDir/logs
 timestamp=`date +%Y%m%d%H%M%S`
 exec 3>&1 4>&2
 trap 'exec 2>&4 1>&3' 0 1 2 3
-exec > >(tee -a $workloadBaseDir/logs/createWorkloadArtifacts_${timestamp}.log) 2>&1
+exec > >(tee -a $buildDir/logs/createWorkloadArtifacts_${timestamp}.log) 2>&1
 
 startTime=$(date +%s)
 echo -e "Starting to create artifacts for the  workload... $(date +%H:%M:%S) \n"
@@ -120,10 +121,8 @@ echo "Using workload definition file: $workloadConfig"
 echo "Full path to workload definition file: $workloadConfigFullPath"
 
 # Read properties from the specified config file into the current shell 
-buildDir=$workloadBaseDir/build
-mkdir -p $buildDir
-artifactsDir=$workloadBaseDir/artifacts
-mkdir -p $artifactsDir
+resourcesDir=$workloadBaseDir/resources
+mkdir -p $resourcesDir
 
 if [ -n "$logLevel" ]; then
   ## TODO Add commandline args code
@@ -160,20 +159,20 @@ source "${buildDir}/setVariables.sh"
 ## Begin framework scripts calls
 #############################
 
-# Copy the users file to the artifacts directory, if it was passed in
+# Copy the users file to the resources directory, if it was passed in
 if [ -n "$usersFile" ]; then
-  echo "Copying the users file to the artifacts directory as : $artifactsDir/users.csv"
-  cp $usersFileFullPath $artifactsDir/users.csv
+  echo "Copying the users file to the resources directory as : $resourcesDir/users.csv"
+  cp $usersFileFullPath $resourcesDir/users.csv
 fi
 
 # Create the custom resources
-python3 ${frameworkScriptsLocationFullPath}/python/createCustomResource.py -a $artifactsDir -t $frameworkScriptsLocationFullPath/python/templates/k8s-custom-resource.yaml.template
+python3 ${frameworkScriptsLocationFullPath}/python/createCustomResource.py -r $resourcesDir -t $frameworkScriptsLocationFullPath/python/templates/k8s-custom-resource.yaml.template
 
 # Create the config map script
-python3 ${frameworkScriptsLocationFullPath}/python/createConfigMapCommand.py -a $artifactsDir -l $logLevel
+python3 ${frameworkScriptsLocationFullPath}/python/createConfigMapCommand.py -r $resourcesDir -o $workloadBaseDir -l $logLevel
 
 # Create the run workload script
-python3 ${frameworkScriptsLocationFullPath}/python/createRunWorkloadScript.py -a $artifactsDir -t $frameworkScriptsLocationFullPath/python/templates/run-workload.sh.template -ht $frameworkScriptsLocationFullPath/python/templates/run-workload-log-header.sh.template -l $logLevel
+python3 ${frameworkScriptsLocationFullPath}/python/createRunWorkloadScript.py -r $resourcesDir -o $workloadBaseDir -t $frameworkScriptsLocationFullPath/python/templates/run-workload.sh.template -ht $frameworkScriptsLocationFullPath/python/templates/run-workload-log-header.sh.template -l $logLevel
 
 #############################
 ## End framewwork scripts calls

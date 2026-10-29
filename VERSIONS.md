@@ -9,13 +9,4 @@ Updates or adjustments are implemented and maintained within the associated bran
 
 ## Current supported versions
 
-| Project Branch | Compatible Viya Release/Cadence |
-|:--------------:|:-------------------------------:|
-| 2026.07 | 2026.07 |
-| 2026.06 | 2026.06 |
-| 2026.05 | 2026.05 |
-| 2026.04 | 2026.04 |
-| 2026.03 | 2026.03 |
-| 2026.02 | 2026.02 |
-| 2026.01 | 2026.01 |
-| 2025.12 | 2025.12 |
+Supported cadences: 2026.01 – 2026.08

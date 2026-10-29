@@ -1,0 +1,9 @@
+id: helloviya-simple
+display-name: Hello Viya Simple
+runtime: locust
+entrypoints:
+  - tests/logonoff.py
+  - tests/createcompute.py
+workload-definitions:
+  - workload-definitions/helloviya-simple.yaml
+required-resources: []

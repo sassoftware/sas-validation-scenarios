@@ -17,7 +17,6 @@ fi
 #fi
 
 # Redirect stdout and stderr to a log file with a timestamp
-workloadBaseDir=/Users/josegulisano/Development/AAT/validation-scenarios/source/validation-scenario-main/sas-validation-scenarios/validation-scenarios/generated/workload-execution/sas-studio/artifacts
 mkdir -p ${logs_base_dir}/execution-logs
 chmod 777 ${logs_base_dir}/execution-logs
 mkdir -p ${logs_base_dir}/results

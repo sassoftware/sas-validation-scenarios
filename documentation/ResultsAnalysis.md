@@ -14,10 +14,10 @@ We will use the helloviya-advanced scenario as an example to walk through this p
 ./generateWorkloads.sh -g ./global-config.yaml -w ./workload-definitions/helloviya-advanced-wrkld-def.yaml
 
 # creating the artifacts and scripts for the scenario execution 
-./generated/workload-execution/runAllCreateWorkloadArtifacts.sh
+./generated/runAllCreateWorkloadArtifacts.sh
 
-# cd to the artifacts directory
-cd generated/workload-execution/helloviya-advanced/artifacts/
+# cd to the workload directory
+cd generated/helloviya-advanced
 
 # to execute the helloviya-advanced scenario 
 ./runWorkload.sh
@@ -34,7 +34,7 @@ ls -al results
 
 By default, the scenarios run with a single user. The results from this run is saved in the results folder as a csv file with a prefix which is the number of users the scenario ran with such as 1_logonoff.csv
 
-Unlike the execution-logs folder the results folder in the artifacts dir  does not gets overwritten after each runWorkload.sh 
+Unlike the execution-logs folder the results folder in the workload directory does not gets overwritten after each runWorkload.sh 
 The logonoff.csv gets saved in the results folder such as this 1_logonoff.csv, 5_logonoff.csv 10_logonff.csv etc 
 Later we can collect the results from the  different runWorkloads run for analysis in SAS Visual Analytics to see scaling patterns and odd behaviors. 
 

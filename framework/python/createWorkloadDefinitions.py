@@ -79,6 +79,14 @@ with open(global_config_file, 'r') as file1:
     logging.error(f"scenarios_base_path not found in the global config yaml file.")
     exit(1)
 
+  # Root of the plugin (package) that owns the scenarios; "plugin-common" dependencies resolve
+  # against it. Hand-written global configs may omit it, so default to the scenarios' parent.
+  plugin_base_path = global_config_properties.get("plugin-base-location")
+  if plugin_base_path:
+    plugin_base_path = os.path.abspath(plugin_base_path)
+  else:
+    plugin_base_path = os.path.dirname(scenarios_base_path)
+
   generated_path = global_config_properties.get("generated-base-location")
   if generated_path:
     generated_path = os.path.abspath(generated_path)
@@ -86,10 +94,17 @@ with open(global_config_file, 'r') as file1:
     logging.error(f"generated_path not found in the global config yaml file.")
     exit(1)  
 
+  # Environment namespace; takes precedence over the namespace baked into workload definitions.
+  global_config_namespace = global_config_properties.get("namespace")
+
 logging.debug(f"Framework path: {framework_path}")
 logging.debug(f"Scenarios base path: {scenarios_base_path}")
+logging.debug(f"Plugin base path: {plugin_base_path}")
 logging.debug(f"Generated path: {generated_path}")
-generated_workloads_execution_path = generated_path + "/workload-execution"
+# Keep workload output directly under the generated root so the package runtime and
+# the legacy generator share the same layout: <generated-root>/<workload-name>/...
+# This matches the tests and the CLI's run_workload() contract.
+generated_workloads_execution_path = generated_path
 generated_workloads_setup_path = generated_path + "/workload-setup"
 logging.debug(f"Generated workloads execution path: {generated_workloads_execution_path}")
 logging.debug(f"Generated workloads setup path: {generated_workloads_setup_path}")
@@ -195,13 +210,18 @@ def create_data_map_yaml(workload_definition_spec):
     with open(scenario_config_file, 'r') as file5: 
       scenario_config = yaml.safe_load(file5)
       scenario_config_properties = scenario_config.get("scenario-config", {})
-      dependencies.extend(scenario_config_properties.get("dependencies", []))
+      # Each dependency keeps its own scenario base path so multi-scenario workloads resolve correctly.
+      dependencies.extend(
+        (dependency, scenario_base_path)
+        for dependency in scenario_config_properties.get("dependencies", [])
+      )
       logging.debug(f"Dependencies found in the scenario config file {scenario_config_file}: {dependencies}")
 
 
   custom_modules_dictionary = []
+  seen_custom_modules = set()
   
-  for dependency in dependencies:
+  for dependency, scenario_base_path in dependencies:
 
     dependency_type = dependency.get("type")
     logging.debug(f"Dependency type: {dependency_type}")
@@ -210,8 +230,9 @@ def create_data_map_yaml(workload_definition_spec):
     dependency_file = dependency.get("file")
     logging.debug(f"Dependency file: {dependency_file}")
 
-    # If the custom_module_path starts with "framework" remove it
-    if dependency_path.startswith("framework"):
+    # If the custom_module_path starts with "framework" remove it.
+    # plugin-common paths are relative to the plugin root and are used verbatim.
+    if dependency_type != "plugin-common" and dependency_path.startswith("framework"):
       dependency_path = dependency_path.replace("framework/", "")
 
     dependency_full_path = ''
@@ -233,6 +254,20 @@ def create_data_map_yaml(workload_definition_spec):
       else:
         logging.error(f"ERROR: Resource module not found at: {os.path.join(scenario_base_path, dependency_path, dependency_file)}")
         exit(1)
+    elif dependency_type == "plugin-common":
+      plugin_common_path = os.path.join(plugin_base_path, dependency_path, dependency_file)
+      logging.debug(f"Checking for plugin common library at: {plugin_common_path}")
+      plugin_root_real = os.path.realpath(plugin_base_path)
+      plugin_common_real = os.path.realpath(plugin_common_path)
+      if os.path.commonpath([plugin_root_real, plugin_common_real]) != plugin_root_real:
+        logging.error(f"ERROR: Plugin common library path escapes the plugin root {plugin_base_path}: {dependency_path}/{dependency_file}")
+        exit(1)
+      if os.path.isfile(plugin_common_path):
+        logging.debug(f"Plugin common library found at: {plugin_common_path}")
+        dependency_full_path = os.path.normpath(plugin_common_path)
+      else:
+        logging.error(f"ERROR: Plugin common library not found at: {plugin_common_path}")
+        exit(1)
     elif dependency_type == "cli-profile":    
       logging.debug(f"Checking for cli-profile module at: {os.path.join(framework_path, dependency_path, dependency_file)}")
       if os.path.isfile(os.path.join(framework_path, dependency_path, dependency_file)):
@@ -242,15 +277,44 @@ def create_data_map_yaml(workload_definition_spec):
         logging.error(f"ERROR: cli-profile module not found at: {os.path.join(framework_path, dependency_path, dependency_file)}")
         exit(1)
 
-    custom_module_data = {
-      "type": dependency.get("type"),
-      "file": dependency_full_path,
-    }
+    custom_module_key = (dependency.get("type"), dependency_full_path)
+    if dependency_full_path and custom_module_key not in seen_custom_modules:
+      seen_custom_modules.add(custom_module_key)
+      custom_module_data = {
+        "type": dependency.get("type"),
+        "file": dependency_full_path,
+      }
+      custom_modules_dictionary.append(custom_module_data)  
 
-    custom_modules_dictionary.append(custom_module_data)  
+  # The config map is mounted flat, so a plugin-common file must not share its file name with
+  # any other module (e.g. a CLI common library of the same name).
+  for plugin_module in custom_modules_dictionary:
+    if plugin_module["type"] != "plugin-common":
+      continue
+    plugin_module_name = os.path.basename(plugin_module["file"])
+    for other_module in custom_modules_dictionary:
+      if other_module is plugin_module or other_module["file"] == plugin_module["file"]:
+        continue
+      if os.path.basename(other_module["file"]) == plugin_module_name:
+        logging.error(
+          f"ERROR: plugin-common file {plugin_module['file']} has the same file name as "
+          f"{other_module['type']} file {other_module['file']}. File names must be unique in the config map."
+        )
+        exit(1)
 
-  # Use the values from the override yaml if present
-  namespace = workload_overrides.get("namespace") if workload_overrides.get("namespace") else custom_resource_spec.get("namespace")  
+  # Priority: workload overrides, then the global config (sas-validation.execution.namespace, i.e. the
+  # user's environment), then the workload definition, whose namespace is only a packaged default.
+  namespace = (
+    workload_overrides.get("namespace")
+    or global_config_namespace
+    or custom_resource_spec.get("namespace")
+  )
+  if not namespace:
+    logging.error(
+      "ERROR: namespace could not be resolved. Set 'sas-validation.execution.namespace' in "
+      "sas-validation.yaml, pass --namespace, or add 'namespace' to the workload's custom-resource-spec."
+    )
+    exit(1)
 
   data = {
     "workload-definition": {
@@ -278,11 +342,13 @@ for workload_definition_spec in workload_definitions.get("workload-definition-sp
   logging.info(f"Creating workload definition for workload: {workload_name}")
 
   output_file_path = os.path.join(generated_workloads_execution_path,workload_name, workload_name + ".yaml")
+  build_dir = os.path.join(generated_workloads_execution_path, workload_name, "build")
   temp_file_path = os.path.join(generated_workloads_setup_path,workload_name, "not-implemented-yet" + ".todo")
 
-  # Create the directory if it doesn't exist
+  # Create the directories if they don't exist
   try:
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+    os.makedirs(build_dir, exist_ok=True)
     logging.info(f"Successfully created directory for workload: {workload_name}")
   except Exception as e:
     logging.error(f"Error creating directory for workload {workload_name}: {e}")
@@ -299,24 +365,25 @@ for workload_definition_spec in workload_definitions.get("workload-definition-sp
   # Copy the createWorkloadArtifacts.sh script fromn framework library
   create_script = os.path.join(framework_path, "bash", "createWorkloadArtifacts.sh")
   if os.path.exists(create_script):
-    shutil.copy(create_script, os.path.join(generated_workloads_execution_path, workload_name))
+    shutil.copy(create_script, build_dir)
   else:
     logging.error(f"The script {create_script} does not exist.")
     exit(1)
+  build_create_script = os.path.join(build_dir, "createWorkloadArtifacts.sh")
 
-  run_script_file = os.path.join(generated_workloads_execution_path,workload_name, "runCreateWorkloadArtifacts.sh")
+  run_script_file = os.path.join(build_dir, "runCreateWorkloadArtifacts.sh")
   workload_artifacts_scripts.append(run_script_file)
   with open(run_script_file, 'w') as run_script:
     run_script.write("#!/usr/bin/env bash \n\n")
     run_script.write(f"## This script is generated by the framework and will execute the createWorkloadArtifacts.sh script.\n")
     run_script.write(f"##   The createWorkloadArtifacts.sh script is responsible for creating the workload artifacts\n")
-    run_script.write(f"##   in the ./artifacts directory that will run the Playwright/Locust validation scenarios.\n\n")
+    run_script.write(f"##   (resources/, runWorkload.sh, deployTaskResourcesAsConfigMap.sh) that will run the Playwright/Locust validation scenarios.\n\n")
 
     run_script.write(f"export logLevel={args.log_level} \n")  
     run_script.write(f"export frameworkScriptsLocationFullPath={framework_path} \n")
     run_script.write(f"export scenariosLocationFullPath={scenarios_base_path} \n\n")
 
-    run_script.write(f"{os.path.join(generated_workloads_execution_path, workload_name, 'createWorkloadArtifacts.sh')} \\\n")
+    run_script.write(f"{build_create_script} \\\n")
     run_script.write(f"  -w {os.path.join(generated_workloads_execution_path, workload_name, workload_name + '.yaml')} \\\n")
     run_script.write(f"  -g {global_config_file} \\\n")                    
     run_script.write(f"  -d {framework_defaults_full_path} \\\n")
@@ -329,7 +396,7 @@ for workload_definition_spec in workload_definitions.get("workload-definition-sp
   # Add execute permissions to the run script
   os.chmod(run_script_file, 0o755)
   # Add execute permissions to the createWorkloadArtifacts.sh script
-  os.chmod(create_script, 0o755)
+  os.chmod(build_create_script, 0o755)
 
 # Generate the "run all" script that executes each "createWorkloadArtifacts.sh" using the list of scripts created above
 run_all_script_file = os.path.join(generated_workloads_execution_path, "runAllCreateWorkloadArtifacts.sh")

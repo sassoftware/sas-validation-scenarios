@@ -1,0 +1,14 @@
+# Local settings for the sas-validation command.
+# Copy this file to sas-validation.yaml and provide values for your environment.
+sas-validation:
+  # Paths are relative to this file unless absolute.
+  framework-root: framework
+  installed-plugins:
+    destination: installed-plugins
+  custom-workloads:
+    location: custom-workloads
+  output:
+    destination: generated-workloads
+  execution:
+    hostname: https://my-viya-system.example.com
+    namespace: testing

@@ -111,9 +111,17 @@ git checkout tags/<viya-release>
   NOTE: If you are using a shared k8s cluster where many different teams use the cluster to run load tests against various Viya environments such as for LoadGen (i.e. where the locust "virtual users" run), then it is recommended to uniquely name this namespace such as "team1tests", "team2tests" etc so as not to step on each other's environments.   
   
 
-**Step 3:** Deploy the locust-k8s-operator in your testing namespace as follows:
+**Step 3:** Deploy the locust-k8s-operator once per cluster:
 
-This guide provides comprehensive instructions for deploying the Locust Kubernetes Operator using its official Helm chart.
+The operator watches LocustTests in every namespace, so a single install serves all testing namespaces on the cluster. Do not install it again per testing namespace; two operators would both act on every test.
+
+The simplest way is the CLI, which applies the vendored manifest `framework/locust-k8s/locust-k8s-operator.yaml` (no Helm needed) into the testing namespace set in `sas-validation.execution.namespace` of `sas-validation.yaml` (or `--namespace`):
+
+> **`sas-validation preflight --group cluster --fix`**
+
+If an operator already runs in another namespace (for example `locust-operator`, or another team's testing namespace), preflight only warns and does not install a second one; repairs to the CRD or cluster RBAC are applied in the namespace where it already runs. The scripts can also be run directly: `framework/locust-k8s/install-locust-k8s-operator.sh <namespace> $KUBECONFIG` (the namespace defaults to `locust-operator` when omitted); `list-` and `uninstall-locust-k8s-operator.sh` take the same arguments.
+
+Alternatively, install it with its official Helm chart as shown below.
 
 **Note:** Make sure [Helm 3](https://helm.sh/docs/intro/install/) is installed on your local machine.
 
@@ -127,7 +135,7 @@ Next, update your local chart repository cache to ensure you have the latest ver
 
 > **`helm repo update`**
 
-You can install the chart with a release name of your choice (e.g., locust-operator). Here are some important point to note: 
+You can install the chart with the release name `locust-operator` in your testing namespace (or a dedicated namespace such as `locust-operator`); the CLI preflight checks expect the `locust-operator` release name and find the operator in any namespace. Here are some important point to note: 
 
 - We are pinning down the version of the locust-operator to 2.2.3
 - We are also using a locust config file called locust-config.yaml (which resides in this directory) to set the cpu and mem limits and requests. 
@@ -135,7 +143,7 @@ You can install the chart with a release name of your choice (e.g., locust-opera
 
 Default Installation: To install the chart with the default configuration, run:
 
-> **`helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml -n testing`**
+> **`helm install locust-operator locust-k8s-operator/locust-k8s-operator --version 2.2.3 -f locust-config.yaml -n <namespace> --create-namespace`**
 
 
 **Additional locust-operator notes**
@@ -148,14 +156,14 @@ Globally scoped resources:
 - clusterrole.rbac.authorization.k8s.io/locust-operator  
 - clusterrolebinding.rbac.authorization.k8s.io/locust-operator
 
-Namespace scoped resources:
-- serviceaccount/default  
+Resources in the operator namespace:
 - serviceaccount/locust-operator
-- role.rbac.authorization.k8s.io/locust-operator
-- rolebinding.rbac.authorization.k8s.io/locust-operator
 - deployment.apps/locust-operator 
+- poddisruptionbudget.policy/locust-operator
 
 ```
+
+If an older 0.8.0 operator (`locust-operator-locust-k8s-operator`) is still deployed in a testing namespace, `sas-validation preflight` warns about it and prints the commands to remove it.
 
 **Step 4:**: We use a custom container image hosted in our **Azure Container Registry**. This image is configured with anonymous pull access, allowing teams across SAS to use it without additional authentication steps.
 
@@ -352,7 +360,7 @@ Before you start, make sure:
   Modify the following values in this file:
 
 ```
-hostname: https://my-viya-system.sas.com
+hostname: https://my-viya-system.example.com
 # Kube config: [some location]/.kube/config
 kube-config: [some location]/.kube/config
 ```
@@ -378,10 +386,10 @@ To run the `helloviya-simple` test:
 ./generateWorkloads.sh -g ./global-config.yaml -w ./workload-definitions/helloviya-simple-wrkld-def.yaml -u users.csv
 
 # creating the artifacts and scripts for the scenario execution 
-./generated/workload-execution/runAllCreateWorkloadArtifacts.sh
+./generated/runAllCreateWorkloadArtifacts.sh
 
 # to execute the helloviya-simple scenario 
-cd ./generated/workload-execution/helloviya-simple/artifacts
+cd ./generated/helloviya-simple
 ./runWorkload.sh
 
 # logs from master and worker pods can be found in the following location:
@@ -392,7 +400,7 @@ cd ./generated/workload-execution/helloviya-simple/artifacts
 
 ```
 
-At this point, the tests have been executed with a single user, and the results are stored in the `results` folder within the artifacts directory.  
+At this point, the tests have been executed with a single user, and the results are stored in the `results` folder within the workload directory.  
 You can now rerun the same scenario with varying numbers of users to observe performance changes and perform a scaling analysis using the saved results.  
 For detailed instructions on running variable user loads, capturing results, and analyzing performance, refer to the section below titled **"Results Analysis"**.
 
@@ -411,10 +419,10 @@ To run the helloviya-advanced test:
 ./generateWorkloads.sh -g ./global-config.yaml -w ./workload-definitions/helloviya-advanced-wrkld-def.yaml -u users.csv
 
 # creating the artifacts and scripts for the scenario execution 
-./generated/workload-execution/runAllCreateWorkloadArtifacts.sh
+./generated/runAllCreateWorkloadArtifacts.sh
 
 # to execute the helloviya-advanced scenario 
-cd ./generated/workload-execution/helloviya-advanced/artifacts
+cd ./generated/helloviya-advanced
 ./runWorkload.sh
 
 # logs from master and worker pods can be found in the following location:
@@ -424,7 +432,7 @@ cd ./generated/workload-execution/helloviya-advanced/artifacts
 ./results
 
 ```
-At this point, the tests have been executed with a single user, and the results are stored in the `results` folder within the artifacts directory.  
+At this point, the tests have been executed with a single user, and the results are stored in the `results` folder within the workload directory.  
 You can now rerun the same scenario with varying numbers of users to observe performance changes and perform a scaling analysis using the saved results.  
 For detailed instructions on running variable user loads, capturing results, and analyzing performance, refer to the section below titled **"Results Analysis"**.
 
@@ -442,10 +450,10 @@ To run the `mixed-studio-vf` workload:
 ./generateWorkloads.sh -g ./global-config.yaml -w ./workload-definitions/mixed-studio-vf-wrkld-def.yaml -u users.csv
 
 # creating the artifacts and scripts for the scenario execution 
-./generated/workload-execution/runAllCreateWorkloadArtifacts.sh
+./generated/runAllCreateWorkloadArtifacts.sh
 
 # to execute the mixed workload scenario 
-cd ./generated/workload-execution/studio-vf-workload/artifacts
+cd ./generated/studio-vf-workload
 ./runWorkload.sh
 
 # logs from master and worker pods can be found in the following location:
@@ -455,14 +463,14 @@ cd ./generated/workload-execution/studio-vf-workload/artifacts
 ./results
 
 ```
-At this point, the tests have been executed with a single user, and the results are stored in the `results` folder within the artifacts directory.  
+At this point, the tests have been executed with a single user, and the results are stored in the `results` folder within the workload directory.  
 You can now rerun the same scenario with varying numbers of users to observe performance changes and perform a scaling analysis using the saved results.  
 For detailed instructions on running variable user loads, capturing results, and analyzing performance, refer to the section below titled **"Results Analysis"**.
 
 [Back to Table of Contents](#table-of-contents)
 
 # Execution Logs
-When you run the runWorkloads.sh script, an execution-logs folder is created in the artifacts directory. This folder holds the logs from all the master 
+When you run the runWorkloads.sh script, an execution-logs folder is created in the workload directory. This folder holds the logs from all the master 
 and worker pods of the tests run. A merged file that contains the merged results from the logs. This folder also holds the exception and failure logs (in the form of csv) of the runs.
 
 A few tips and tricks to scan the logs for important information. 

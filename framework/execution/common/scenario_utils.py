@@ -9,6 +9,9 @@ from locust_plugins.csvreader import CSVReader
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
+SERVICE_ACCOUNT_NAMESPACE_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+DEFAULT_NAMESPACE = "testing"
+
 class UsersManager:
     """Manages retrieval and decoding of Kubernetes secrets."""
     
@@ -43,9 +46,26 @@ class UsersManager:
             print(f"Exception when retrieving secret: {e}")
             return []
     
+    def get_namespace(self) -> str:
+        """Namespace this pod runs in (POD_NAMESPACE, then service account namespace file)."""
+        env_namespace = os.environ.get("POD_NAMESPACE")
+        if env_namespace:
+            return env_namespace.strip()
+        try:
+            with open(SERVICE_ACCOUNT_NAMESPACE_FILE, 'r', encoding='utf-8') as f:
+                pod_namespace = f.read().strip()
+                if pod_namespace:
+                    return pod_namespace
+        except OSError:
+            pass
+        return DEFAULT_NAMESPACE
+
     def get_user_list(self, secret_name: str = "validation-scenarios", 
-                     namespace: str = "testing", 
+                     namespace: str = None, 
                      secret_key: str = "users-file-dict") -> list:
+        
+        if not namespace:
+          namespace = self.get_namespace()
         
         # Check if the CSV file exists, if it does return that as the user list. If it was not passed in as an argument, then get it from the k8s Secrets
         csv_file_path = '/lotest/src/users.csv'

@@ -23,7 +23,8 @@ parser = argparse.ArgumentParser(description="Argument parser")
 # Add named arguments
 parser.add_argument("-t", "--template", type=str, help="Custom Resource template file", required=True)
 parser.add_argument("-ht", "--headerTemplate", type=str, help="Custom Resource log header template file", required=True)
-parser.add_argument("-a", "--artifactPath", type=str, help="Artifacts path", required=True)
+parser.add_argument("-r", "--resourcesPath", type=str, help="Resources path", required=True)
+parser.add_argument("-o", "--outputPath", type=str, help="Path to write runWorkload.sh, execution-logs, and results", required=True)
 parser.add_argument("-l", "--logLevel", type=str, help="Output build path", required=False, default="INFO")
 
 # Parse the arguments
@@ -41,7 +42,8 @@ hostname = os.getenv("hostname")
 custom_resource_spec = os.getenv("customResourceSpec")
 framework_defaults = os.getenv("frameworkDefaults")
 
-logging.info(f"Artifacts Path: {args.artifactPath}")
+logging.info(f"Resources Path: {args.resourcesPath}")
+logging.info(f"Output Path: {args.outputPath}")
 logging.info(f"Template: {args.template}")
 logging.info(f"Log Header Template: {args.headerTemplate}")
 
@@ -77,24 +79,24 @@ with open(args.headerTemplate, 'r') as file:
 run_workload_template = string.Template(template_file)
 run_workload_log_header_template = string.Template(logs_header_template_file)
 
-with open(os.path.join(args.artifactPath, "runWorkload.sh" ), "w") as file:
+with open(os.path.join(args.outputPath, "runWorkload.sh" ), "w") as file:
 
   file.write("#!/bin/bash\n")
   file.write(f"#Execute this script to run the workload\n\n")
 
-  logs_base_location = args.artifactPath
-  logs_dir = os.path.join(args.artifactPath, "execution-logs")
+  logs_base_location = args.outputPath
+  logs_dir = os.path.join(args.outputPath, "execution-logs")
   logging.info(f"Logs directory: {logs_dir}")
   logging.debug(f"Logs base location: {logs_base_location}")
 
   file.write(f"\n##########  Logging ########## \n")
 
-  results_dir = os.path.join(args.artifactPath, "results")
+  results_dir = os.path.join(args.outputPath, "results")
   run_workload_log_header_doc = run_workload_log_header_template.substitute(logs_dir=logs_dir, logs_base_dir=logs_base_location, results_dir=results_dir)
   file.write(run_workload_log_header_doc)
   file.write(f"\n\n")
 
-  config_map_cmd = os.path.join(args.artifactPath, "deployTaskResourcesAsConfigMap.sh")
+  config_map_cmd = os.path.join(args.outputPath, "deployTaskResourcesAsConfigMap.sh")
   file.write(f"##########  Deploy the config map ########## \n")
   file.write(f"{config_map_cmd} \n")
 
@@ -111,10 +113,10 @@ with open(os.path.join(args.artifactPath, "runWorkload.sh" ), "w") as file:
     ## TODO if you name it 1-csv the file gets saved as stats.csv_1-stats.csv 
     ## something like that. You need to look inside your mster pod shell to see how its is getting named. When you say --csv stats.csv it will name it as stats.csv_stats.csv
 
-    k8s_cr = os.path.join(args.artifactPath,"k8s-cr-" + workload_name + ".yaml")
-    stats_location = os.path.join(args.artifactPath, "results", f"$users-{workload_name}.csv")
-    failures_location = os.path.join(args.artifactPath, "execution-logs", f"$users-{workload_name}-failures.csv")
-    exceptions_location = os.path.join(args.artifactPath, "execution-logs", f"$users-{workload_name}-exceptions.csv")
+    k8s_cr = os.path.join(args.resourcesPath,"k8s-cr-" + workload_name + ".yaml")
+    stats_location = os.path.join(results_dir, f"$users-{workload_name}.csv")
+    failures_location = os.path.join(logs_dir, f"$users-{workload_name}-failures.csv")
+    exceptions_location = os.path.join(logs_dir, f"$users-{workload_name}-exceptions.csv")
     run_workload_doc = run_workload_template.substitute(namespace=namespace, k8s_cr=k8s_cr, stats_location=stats_location, failures_location=failures_location, exceptions_location=exceptions_location, name=workload_name, config_map_name=config_map_name, workload_task=workload_task, 
                                                         workload_path=workload_path, timeout=timeout, hostname=hostname, frameworkResourcesLocation=framework_resources_location, logs_dir=logs_dir)
 
@@ -127,4 +129,4 @@ with open(os.path.join(args.artifactPath, "runWorkload.sh" ), "w") as file:
   file.close
 
   #Make the script executable
-  os.chmod(os.path.join(args.artifactPath, "runWorkload.sh"), 0o755)
+  os.chmod(os.path.join(args.outputPath, "runWorkload.sh"), 0o755)

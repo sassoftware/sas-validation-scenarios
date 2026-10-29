@@ -23,7 +23,8 @@ logging.getLogger().name = os.path.basename(__file__)
 parser = argparse.ArgumentParser(description="Argument parser")
 
 # Add named arguments
-parser.add_argument("-a", "--artifactPath", type=str, help="Artifacts path", required=True)
+parser.add_argument("-r", "--resourcesPath", type=str, help="Resources path", required=True)
+parser.add_argument("-o", "--outputPath", type=str, help="Path to write deployTaskResourcesAsConfigMap.sh", required=True)
 parser.add_argument("-l", "--log_level", type=str, help="Output build path", required=False, default="INFO")
 
 # Parse the arguments
@@ -44,7 +45,8 @@ global_config_full_path = os.getenv("globalConfigFullPath")
 users_file_full_path = os.getenv("usersFileFullPath")
 certs_file_full_path = os.getenv("trustedCerts")
 
-logging.info(f"Artifacts Path: {args.artifactPath}")
+logging.info(f"Resources Path: {args.resourcesPath}")
+logging.info(f"Output Path: {args.outputPath}")
 logging.info(f"Scenarios Base Location: {scenarios_base_location}")
 logging.info(f"Framework Resources Location: {framework_resources_location}")
 logging.info(f"Hostname: {hostname}")
@@ -74,7 +76,7 @@ logging.info(f"Path to task resources: {path_to_task_resources}")
 common_lib = "python/common.py"
 logging.info(f"Common library: {common_lib}")
 
-with open(os.path.join(args.artifactPath, "deployTaskResourcesAsConfigMap.sh"), "w") as file:
+with open(os.path.join(args.outputPath, "deployTaskResourcesAsConfigMap.sh"), "w") as file:
 
   file.write("#!/bin/bash\n")
   file.write(f"#Execute this script to load the task resources as a Kubernetes Config Map\n\n")
@@ -84,7 +86,7 @@ with open(os.path.join(args.artifactPath, "deployTaskResourcesAsConfigMap.sh"), 
   if users_file_full_path and users_file_full_path.lower() != "none":
     # Rename the users_file_full_path filename to users.yaml
     logging.debug(f"Users file provided: {users_file_full_path}")
-    users_file_renamed = os.path.join(args.artifactPath, "users.csv")
+    users_file_renamed = os.path.join(args.resourcesPath, "users.csv")
     logging.info(f"Renamed users file: {users_file_renamed}")
     if os.path.isfile(users_file_renamed):
       file.write(f"  --from-file={users_file_renamed} \\\n")
@@ -130,12 +132,12 @@ with open(os.path.join(args.artifactPath, "deployTaskResourcesAsConfigMap.sh"), 
 
         cli_profile_filled = cli_profile_template.substitute(hostname=hostname)
         
-        cli_profile = os.path.join(args.artifactPath, "config.json")
+        cli_profile = os.path.join(args.resourcesPath, "config.json")
         logging.debug(f"Writing filled cli-profile to: {cli_profile}")
 
         #File name is the custom_module_file without the "template" suffix
         cli_profile_filename = os.path.basename(custom_module_file).replace(".template", "")
-        cli_profile_full_path = os.path.join(args.artifactPath, cli_profile_filename)
+        cli_profile_full_path = os.path.join(args.resourcesPath, cli_profile_filename)
         with open(cli_profile_full_path, "w") as cli_profile_filled_file:
           cli_profile_filled_file.write(cli_profile_filled)
           #Update the custom_module_file to point to the filled file
@@ -148,8 +150,8 @@ with open(os.path.join(args.artifactPath, "deployTaskResourcesAsConfigMap.sh"), 
       logging.info(f"Processing the trusted-certs file from the global config: {certs_file_full_path}")
       if os.path.isfile(certs_file_full_path):
         logging.debug(f"PEM file found: {certs_file_full_path}")
-        #Copy the pem file to the artifact path
-        shutil.copy(certs_file_full_path, os.path.join(args.artifactPath, "trustedcerts.pem"))
+        #Copy the pem file to the resources path
+        shutil.copy(certs_file_full_path, os.path.join(args.resourcesPath, "trustedcerts.pem"))
         # custom_module["file"] = certs_file_full_path
         # custom_module_file = certs_file_full_path
         #Add the filled cli-profile path to the array
@@ -192,4 +194,4 @@ with open(os.path.join(args.artifactPath, "deployTaskResourcesAsConfigMap.sh"), 
 
   #Make the script executable
   logging.info(f"Making the script executable.")
-  os.chmod(os.path.join(args.artifactPath, "deployTaskResourcesAsConfigMap.sh"), 0o755)
+  os.chmod(os.path.join(args.outputPath, "deployTaskResourcesAsConfigMap.sh"), 0o755)
