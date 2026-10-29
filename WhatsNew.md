@@ -20,7 +20,7 @@ were formerly *releases*.
 
 Plugins are identified by repository alias and version, and now install into
 `<destination>/<repository-alias>/<plugin>-<version>/` with an install record. Previously installed
-plugins are still found. See [README.md](./README.md).
+plugins are still found. See [CLI-CHEATSHEET.md](./CLI-CHEATSHEET.md).
 </details>
 
 ## 2026.05 
