@@ -6,21 +6,54 @@
 from datetime import datetime
 import json
 import os
+import site
+import signal
 import subprocess
 import sys
+import sysconfig
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union
 
 from .manifest import (
+    EXECUTION_TARGET_KUBERNETES,
+    EXECUTION_TARGET_LOCAL,
+    EXECUTION_TARGETS,
     ManifestError,
     ReleaseManifest,
     ScenarioManifest,
+    read_execution_targets,
     read_plugin_common_dependencies,
     safe_relative_path,
 )
 
 WORKLOAD_DEFINITIONS_DIRECTORY = "workload-definitions"
+RUN_WORKLOAD_SCRIPT = "runWorkload.sh"
+RUN_WORKLOAD_LOCAL_SCRIPT = "runWorkloadLocal.sh"
+LOCUST_OVERRIDE_ENV = "SAS_VALIDATION_LOCUST"
+
+
+def local_locust_executable() -> Optional[Path]:
+    """The locust script installed for the interpreter running sas-validation, if any.
+
+    Checked in the interpreter's scripts directory, then the per-user one (pip --user),
+    so local runs use the same environment the dependency checks inspected.
+    """
+    names = ("locust.exe", "locust") if os.name == "nt" else ("locust",)
+    directories = [sysconfig.get_path("scripts")]
+    if site.ENABLE_USER_SITE:
+        scheme = f"{os.name}_user"
+        if scheme in sysconfig.get_scheme_names():
+            directories.append(sysconfig.get_path("scripts", scheme))
+    for directory in directories:
+        if not directory:
+            continue
+        for name in names:
+            candidate = Path(directory) / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return candidate
+    return None
 
 
 @dataclass(frozen=True)
@@ -148,6 +181,9 @@ class ScenarioPackage:
         )
         self._validate_files(layout, manifest, manifest_path)
         self._validate_plugin_common(layout, manifest, manifest_path)
+        config_path = scenario_root / "scenario-config.yaml"
+        if config_path != manifest_path and config_path.is_file():
+            read_execution_targets(config_path)
         return layout, manifest
 
     def synthesize_workload_definition(
@@ -409,6 +445,24 @@ class ScenarioPackage:
 
         return scenario_config
 
+    def unsupported_scenarios(self, workload: Union[str, Path], target: str) -> List[str]:
+        """Scenario configs used by the workload whose 'execution-targets' exclude the target."""
+        definition = self.workload_definition(workload)
+        scenarios_root = self.root / "scenarios"
+        unsupported = []
+        for scenario_config in definition.scenario_configs:
+            config_path = scenarios_root / scenario_config
+            # The scenario-config.yaml and a sibling scenario-manifest.yaml can both declare targets.
+            candidates = [config_path, config_path.parent / "scenario-manifest.yaml"]
+            for candidate in dict.fromkeys(candidates):
+                if not candidate.is_file():
+                    continue
+                targets = read_execution_targets(candidate)
+                if targets is not None and target not in targets:
+                    unsupported.append(scenario_config)
+                    break
+        return unsupported
+
     def prepare(
         self,
         workload: Union[str, Path],
@@ -417,8 +471,14 @@ class ScenarioPackage:
         hostname: Optional[str] = None,
         trusted_certs: Optional[Path] = None,
         namespace: Optional[str] = None,
+        execution_target: str = EXECUTION_TARGET_KUBERNETES,
+        local_options: Optional[Mapping[str, Any]] = None,
     ) -> LegacyInputs:
         """Write configuration files consumable by the existing generator."""
+        if execution_target not in EXECUTION_TARGETS:
+            raise ManifestError(
+                f"Unknown execution target '{execution_target}'; expected {' or '.join(EXECUTION_TARGETS)}"
+            )
         definition = self.workload_definition(workload)
         try:
             import yaml
@@ -450,6 +510,14 @@ class ScenarioPackage:
             values["global-config"]["namespace"] = namespace
         if trusted_certs is not None:
             values["global-config"]["trusted-certs"] = str(trusted_certs)
+        if execution_target != EXECUTION_TARGET_KUBERNETES:
+            values["global-config"]["execution-target"] = execution_target
+        if execution_target == EXECUTION_TARGET_LOCAL:
+            options = dict(local_options or {})
+            values["global-config"]["local-execution"] = {
+                "headed": bool(options.get("headed", False)),
+                "processes": options.get("processes"),
+            }
         with global_config.open("w", encoding="utf-8") as stream:
             yaml.safe_dump(values, stream, sort_keys=False)
 
@@ -461,6 +529,7 @@ class ScenarioPackage:
             "global-config": str(global_config),
             "workload-definition": str(workload_definition),
             "generated-root": str(generated_root),
+            "execution-target": execution_target,
         }
         (generated_root / "resolved-inputs.json").write_text(
             json.dumps(description, indent=2) + "\n", encoding="utf-8"
@@ -478,6 +547,8 @@ class ScenarioPackage:
         users_file: Optional[Path] = None,
         workload_overrides: Optional[Path] = None,
         log_level: str = "INFO",
+        execution_target: str = EXECUTION_TARGET_KUBERNETES,
+        local_options: Optional[Mapping[str, Any]] = None,
     ) -> GenerationResult:
         """Prepare a package and run the existing workload-definition generator."""
         inputs = self.prepare(
@@ -487,6 +558,8 @@ class ScenarioPackage:
             hostname=hostname,
             trusted_certs=trusted_certs,
             namespace=namespace,
+            execution_target=execution_target,
+            local_options=local_options,
         )
         generator = framework_root.resolve() / "python" / "createWorkloadDefinitions.py"
         defaults = framework_root.resolve() / "framework-defaults.yaml"
@@ -550,7 +623,9 @@ class ScenarioPackage:
             generated_workload_root=inputs.generated_root,
         )
 
-    def run_workload(self, workload: Union[str, Path], generated_root: Path) -> int:
+    def run_workload(
+        self, workload: Union[str, Path], generated_root: Path, local: bool = False
+    ) -> int:
         """Run the generated workload script and return its process exit code."""
         definition = self.workload_definition(workload)
         selector = str(workload)
@@ -564,11 +639,17 @@ class ScenarioPackage:
                 f"Workload definition '{selector}' contains multiple workloads: {names}. "
                 "Select a workload by spec name."
             )
-        script = generated_root.resolve() / workload_name / "runWorkload.sh"
+        script_name = RUN_WORKLOAD_LOCAL_SCRIPT if local else RUN_WORKLOAD_SCRIPT
+        script = generated_root.resolve() / workload_name / script_name
         if not script.is_file():
-            alternative = generated_root.resolve() / workload_name / "artifacts" / "runWorkload.sh"
-            if alternative.is_file():
+            alternative = generated_root.resolve() / workload_name / "artifacts" / script_name
+            if not local and alternative.is_file():
                 script = alternative
+            elif local:
+                raise ManifestError(
+                    f"Generated local workload script does not exist: {script}. "
+                    "Generate the workload with 'sas-validation run --local'."
+                )
             else:
                 raise ManifestError(
                     f"Generated workload script does not exist: {script}. "
@@ -582,7 +663,40 @@ class ScenarioPackage:
         environment["PATH"] = os.pathsep.join(
             [interpreter_directory, environment.get("PATH", "")]
         )
+        if local and not environment.get(LOCUST_OVERRIDE_ENV):
+            locust = local_locust_executable()
+            if locust is not None:
+                environment[LOCUST_OVERRIDE_ENV] = str(locust)
         try:
+            if local:
+                process = subprocess.Popen([str(script)], cwd=script.parent, env=environment)
+                previous = {}
+
+                def forward_signal(signum, _frame):
+                    try:
+                        process.send_signal(signum)
+                    except ProcessLookupError:
+                        pass
+
+                try:
+                    if threading.current_thread() is threading.main_thread():
+                        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                            previous[sig] = signal.signal(sig, forward_signal)
+                    return process.wait()
+                finally:
+                    for sig, handler in previous.items():
+                        signal.signal(sig, handler)
+                    if process.poll() is None:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=25)
+                        except subprocess.TimeoutExpired as error:
+                            process.kill()
+                            process.wait()
+                            raise ManifestError(
+                                "Local runner did not stop; use 'sas-validation cleanup --local --list' "
+                                "to recover tracked processes"
+                            ) from error
             completed = subprocess.run(
                 [str(script)],
                 check=False,

@@ -10,6 +10,7 @@ from .core import Finding, PreflightContext, Status
 GROUP_TITLES = {
     "client": "Client workstation",
     "cluster": "Load generation cluster",
+    "local": "Local Locust execution",
     "viya": "SAS Viya environment",
 }
 MARKERS = {
@@ -69,7 +70,7 @@ def render(findings: Sequence[Finding], fixed: bool) -> List[str]:
         f"{counts[Status.FAIL]} failed, {counts[Status.SKIPPED]} skipped"
     )
 
-    fixable = [finding for finding in findings if finding.fixable]
+    fixable = [finding for finding in findings if finding.fixable and not finding.fix_error]
     if fixable:
         lines.append("")
         lines.append(f"Fixable automatically ({len(fixable)}) - re-run with --fix:")
@@ -81,7 +82,7 @@ def render(findings: Sequence[Finding], fixed: bool) -> List[str]:
         for finding in findings
         if finding.result.status in (Status.FAIL, Status.WARN)
         and finding.result.remedy
-        and not finding.fixable
+        and (not finding.fixable or finding.fix_error)
     ]
     if manual:
         lines.append("")

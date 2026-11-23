@@ -1,30 +1,11 @@
 # WHAT'S NEW ?!?
 
-## 2026.10 (BREAKING CHANGES)
+## 2.0.0 (BREAKING CHANGES)
 <details>
   <summary> Scenario packages and releases are now plugins</summary>
 
-The `packages` and `releases` command groups were replaced by a single `plugins` group, following the
-SAS Viya CLI `plugins` convention. Installed plugins were formerly *packages*; repository plugins
-were formerly *releases*.
-
-| Before | Now |
-|--------|-----|
-| `releases list [--repository <alias>]` | `plugins list-repo-plugins [--repo <alias>]` (all repositories by default, with `*`/`^` status markers) |
-| `packages install --repository <alias> --version <v>` | `plugins install --repo <alias> --version <v>` |
-| `packages list` | `plugins list` |
-| | `plugins list-repos`, `plugins validate`, `plugins uninstall` (new) |
-| `--package-version` (`run`, `workloads list`, `scenarios list`) | `--plugin-version`, plus a new `--repo` filter |
-| `auth status --repository <alias>` | `auth status --repo <alias>` |
-| `sas-validation.installed-packages.destination` | `sas-validation.installed-plugins.destination` (old key still accepted) |
-
-Plugins are identified by repository alias and version, and now install into
-`<destination>/<repository-alias>/<plugin>-<version>/` with an install record. Previously installed
-plugins are still found. See [CLI-CHEATSHEET.md](./CLI-CHEATSHEET.md).
+  See the [CLI-README.md](./README.md) for details and the [CLI-CHEATSHEET.md](./CLI-CHEATSHEET.md) for examples on how to use the new CLI.
 </details>
-
-## 2026.05 
-
 
 ## 2026.04 (BREAKING CHANGES)
 <details>

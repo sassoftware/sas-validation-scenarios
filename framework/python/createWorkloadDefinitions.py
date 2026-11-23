@@ -97,10 +97,19 @@ with open(global_config_file, 'r') as file1:
   # Environment namespace; takes precedence over the namespace baked into workload definitions.
   global_config_namespace = global_config_properties.get("namespace")
 
+  # "kubernetes" (default) deploys Locust with the operator; "local" runs Locust on this machine.
+  execution_target = global_config_properties.get("execution-target") or "kubernetes"
+
+  # Trusted certificates file shipped to scenarios that declare a "trusted-certs" dependency.
+  trusted_certs_path = global_config_properties.get("trusted-certs")
+  if trusted_certs_path:
+    trusted_certs_path = os.path.abspath(os.path.expanduser(str(trusted_certs_path)))
+
 logging.debug(f"Framework path: {framework_path}")
 logging.debug(f"Scenarios base path: {scenarios_base_path}")
 logging.debug(f"Plugin base path: {plugin_base_path}")
 logging.debug(f"Generated path: {generated_path}")
+logging.info(f"Execution target: {execution_target}")
 # Keep workload output directly under the generated root so the package runtime and
 # the legacy generator share the same layout: <generated-root>/<workload-name>/...
 # This matches the tests and the CLI's run_workload() contract.
@@ -127,6 +136,11 @@ if workload_overrides_file:
     workload_overrides = workload_overrides.get("workload-overrides", {})
 else:
   workload_overrides = {}
+
+# Dependency types whose file is produced by the framework; their path/file entries are ignored.
+GENERATED_DEPENDENCY_TYPES = ("config-json", "trusted-certs")
+# Former dependency type names, still accepted.
+RENAMED_DEPENDENCY_TYPES = {"cli-profile": "config-json"}
 
 def get_value_with_priority(key, overrides, definition, defaults):
     """
@@ -224,6 +238,12 @@ def create_data_map_yaml(workload_definition_spec):
   for dependency, scenario_base_path in dependencies:
 
     dependency_type = dependency.get("type")
+    if dependency_type in RENAMED_DEPENDENCY_TYPES:
+      logging.warning(
+        f"{os.path.join(scenario_base_path, 'scenario-config.yaml')}: dependency type '{dependency_type}' is "
+        f"renamed '{RENAMED_DEPENDENCY_TYPES[dependency_type]}'; update the scenario config."
+      )
+      dependency_type = RENAMED_DEPENDENCY_TYPES[dependency_type]
     logging.debug(f"Dependency type: {dependency_type}")
     dependency_path = dependency.get("path")
     logging.debug(f"Dependency path: {dependency_path}")  
@@ -232,10 +252,16 @@ def create_data_map_yaml(workload_definition_spec):
 
     # If the custom_module_path starts with "framework" remove it.
     # plugin-common paths are relative to the plugin root and are used verbatim.
-    if dependency_type != "plugin-common" and dependency_path.startswith("framework"):
+    if dependency_type != "plugin-common" and dependency_path and dependency_path.startswith("framework"):
       dependency_path = dependency_path.replace("framework/", "")
 
     dependency_full_path = ''
+
+    if dependency_type in GENERATED_DEPENDENCY_TYPES and (dependency_path or dependency_file):
+      logging.warning(
+        f"{os.path.join(scenario_base_path, 'scenario-config.yaml')}: 'path' and 'file' are not used for "
+        f"'{dependency_type}' dependencies and can be removed."
+      )
 
     ##Check for the existence of the named dependency
     if dependency_type == "common":
@@ -268,20 +294,41 @@ def create_data_map_yaml(workload_definition_spec):
       else:
         logging.error(f"ERROR: Plugin common library not found at: {plugin_common_path}")
         exit(1)
-    elif dependency_type == "cli-profile":    
-      logging.debug(f"Checking for cli-profile module at: {os.path.join(framework_path, dependency_path, dependency_file)}")
-      if os.path.isfile(os.path.join(framework_path, dependency_path, dependency_file)):
-        logging.debug(f"cli-profile module found at: {os.path.join(framework_path, dependency_path, dependency_file)}")
-        dependency_full_path = os.path.join(framework_path, dependency_path, dependency_file)
-      else:
-        logging.error(f"ERROR: cli-profile module not found at: {os.path.join(framework_path, dependency_path, dependency_file)}")
+    elif dependency_type == "config-json":
+      # The framework always generates config.json from its built-in sas-viya CLI profile template.
+      if not global_config_properties.get("hostname"):
+        logging.error(
+          f"ERROR: {os.path.join(scenario_base_path, 'scenario-config.yaml')} declares a config-json dependency, "
+          f"but no hostname is configured. Set 'sas-validation.execution.hostname' in sas-validation.yaml."
+        )
         exit(1)
+      config_json_template = os.path.join(framework_path, "python", "templates", "config.json.template")
+      if not os.path.isfile(config_json_template):
+        logging.error(f"ERROR: config-json template not found at: {config_json_template}")
+        exit(1)
+      dependency_full_path = config_json_template
+    elif dependency_type == "trusted-certs":
+      # The dependency's path/file are placeholders; the file comes from the trusted-certs setting.
+      scenario_config_for_error = os.path.join(scenario_base_path, "scenario-config.yaml")
+      if not trusted_certs_path:
+        logging.error(
+          f"ERROR: {scenario_config_for_error} declares a trusted-certs dependency, but no trusted "
+          f"certificates file is configured. Set 'sas-validation.execution.trusted-certs' in sas-validation.yaml."
+        )
+        exit(1)
+      if not os.path.isfile(trusted_certs_path):
+        logging.error(
+          f"ERROR: {scenario_config_for_error} declares a trusted-certs dependency, but the trusted "
+          f"certificates file does not exist: {trusted_certs_path}"
+        )
+        exit(1)
+      dependency_full_path = trusted_certs_path
 
-    custom_module_key = (dependency.get("type"), dependency_full_path)
+    custom_module_key = (dependency_type, dependency_full_path)
     if dependency_full_path and custom_module_key not in seen_custom_modules:
       seen_custom_modules.add(custom_module_key)
       custom_module_data = {
-        "type": dependency.get("type"),
+        "type": dependency_type,
         "file": dependency_full_path,
       }
       custom_modules_dictionary.append(custom_module_data)  
@@ -309,7 +356,7 @@ def create_data_map_yaml(workload_definition_spec):
     or global_config_namespace
     or custom_resource_spec.get("namespace")
   )
-  if not namespace:
+  if not namespace and execution_target != "local":
     logging.error(
       "ERROR: namespace could not be resolved. Set 'sas-validation.execution.namespace' in "
       "sas-validation.yaml, pass --namespace, or add 'namespace' to the workload's custom-resource-spec."
@@ -377,7 +424,8 @@ for workload_definition_spec in workload_definitions.get("workload-definition-sp
     run_script.write("#!/usr/bin/env bash \n\n")
     run_script.write(f"## This script is generated by the framework and will execute the createWorkloadArtifacts.sh script.\n")
     run_script.write(f"##   The createWorkloadArtifacts.sh script is responsible for creating the workload artifacts\n")
-    run_script.write(f"##   (resources/, runWorkload.sh, deployTaskResourcesAsConfigMap.sh) that will run the Playwright/Locust validation scenarios.\n\n")
+    run_script.write(f"##   (resources/, runWorkload.sh, deployTaskResourcesAsConfigMap.sh, or local/src and runWorkloadLocal.sh\n")
+    run_script.write(f"##   for local runs) that will run the Playwright/Locust validation scenarios.\n\n")
 
     run_script.write(f"export logLevel={args.log_level} \n")  
     run_script.write(f"export frameworkScriptsLocationFullPath={framework_path} \n")

@@ -1,103 +1,221 @@
-# Running Validation Scenarios Outside of Kubernetes Using Locust Commands
+# Running Validation Scenarios Outside of Kubernetes
 
-Clone this project using the appropriate Viya release and Git repository location:
+`sas-validation run --local` runs a workload with Locust on your own machine (a laptop or a VM)
+instead of deploying it to Kubernetes. It uses the same plugins, workload definitions, and
+results layout as a Kubernetes run, so a scenario that passes locally runs unchanged in the
+cluster. No Kubernetes cluster, namespace, operator, or `KUBECONFIG` is needed.
 
+Local runs are a good fit for single-user checks, scenario development, and debugging. Use
+Kubernetes for load tests with many users.
+
+## Before you start
+
+- **Machine.** macOS or Linux with Python 3.9 or later and `bash`; Python 3.10 or later is
+  recommended. On Python 3.9, Locust's `gevent` dependency has no prebuilt package for some
+  platforms (for example Linux on ARM), so pip must compile it, which needs a C compiler and the
+  Python development headers. Locust's `--processes` option
+  is not supported on Windows. Each simulated user runs a Chromium browser, so size the machine
+  for the users you run: on a VM with 8 CPUs, 2 or 3 users typically give better results than 10.
+- **Network.** The machine can reach your SAS Viya URL.
+- **SAS Viya.**
+  - The welcome screen and new user tour are disabled.
+  - SAS Studio is installed and compute nodes are available. A manual sign-in to SAS Studio as a
+    test user starts a compute server.
+  - The test users exist in SAS Viya and are **not** administrators.
+  - **Very important:** the content the scenarios need is loaded. See
+    [RESOURCES-SETUP.md](./RESOURCES-SETUP.md).
+
+## Set up the CLI
+
+Install the CLI with the `local` extra, which adds Locust, locust-plugins, Playwright, and
+python-dotenv:
+
+```bash
+cd sas-validation-scenarios
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install --prefer-binary -e '.[local]'
 ```
-git clone --branch <viya-release> <repository-location>/sas-validation-scenarios.git
+
+`--prefer-binary` lets pip choose an older release with a prebuilt package over a newer one that
+would have to be compiled.
+
+If you skip the extra, `run --local` finds the missing packages before it generates anything and
+offers to install them (see [Missing dependencies](#missing-dependencies)).
+
+Create `sas-validation.yaml` from its template and set the SAS Viya URL. Set `trusted-certs` too
+if your Viya system uses a certificate that this machine does not trust:
+
+```bash
+cp sas-validation.yaml.template sas-validation.yaml
 ```
-Navigate to the following directory: 
+
+```yaml
+  execution:
+    hostname: https://my-viya-system.example.com
+    users-file: users.csv           # optional; --users-file overrides it
+    # trusted-certs: trustedcerts.pem
 ```
-cd sas-validation-scenarios/validation-scenarios/locust-commandline
-```
-Your current working directory should be locust-commandline
 
-This folder has a folder called scenarios. You can run any of the scenarios using the locust command line. 
+`namespace` is not used by local runs.
 
-```
-Before you start, make sure: 
+## Create the users file
 
-- You have a vm you can run tests on, this could also be your laptop. 
-- Ensure that your vm has sufficient resources for multi-user tests. 
+Local runs read test credentials from a CSV file with one `user,password` row per user; they never
+read the Kubernetes secret. Name the file with `--users-file` or with `execution.users-file`:
 
-   For example, if your VM has 8 CPUs, running 10 concurrent users may overload the system.
-   In this case limiting the load to 2–3 users typically yields better results.
- 
-- This vm has access to your viya URL
-- Welcome screen and new user tour is disabled. 
-- SAS Studio is installed, compute nodes are available
-- Manual login to sas studio is successful and a compute server is created correctly
-- Users secified in users.csv file exists on your Viya system
-- Make sure the users specified in the users.csv file are NON ADMIN users
-- **Very Imp:** Make sure you have loaded all the content required to run these tests
-  Refer to the Resource-Setup section to make sure all the content needed to run the scenarios is available in 
-  your viya environment. 
-
-```
-## Additional Setup
-
-1. Make sure python and pip3 is installed 
-2. Make sure your python venv is correctly set
-3. Install the following using pip:
-
--   pip3 install locust
--   pip3 install playwright locust locust-plugins 
--   playwright install 
--   playwright install-deps 
--   pip3 install kubernetes ( I think this is not needed)
-
-4. Create a users.csv file such as this and place it in the test folder 
-
-```
+```text
 user1,pass1
 user2,pass2
 user3,pass3
-user4,pass4
-user5,pass5
 ```
 
-## Running headed vs headless: 
+Provide at least as many users as the workload runs concurrently.
 
-You can run these tests on a local VM with one or a few users, in either **headed** or **headless** mode.  
-- In **headed mode**, a live browser window opens, allowing you to observe the test execution in real time.  
-  Do not use this option for more than 2-3 users, else you will have that many browsers open up 
-  on your VM as the number of users you are specifying. 
+## Check the machine
 
-- In **headless mode**, tests run silently in the background without displaying the browser.
-
-By default the scenarios run in headed mode, meaning you will see a live browser come up and execute the tests. 
-But if you want to run them in a headless mode, modify the following PlaywrightUser setting in the events.py 
-The events.py file resides in this same folder. 
-
-```
-**HEADLESS MODE**
-PlaywrightUser.headless = True 
-
-**HEADED MODE**
-PlaywrightUser.headless = False
+```bash
+sas-validation preflight --group local
+sas-validation preflight --group local --fix
 ```
 
-### Run scenarios using locust command line 
+The `local` group checks the Python version (it warns below 3.10), that the Locust and Playwright
+modules and the Playwright Chromium browser
+are installed, that the users file can be read, and that SAS Viya answers at `/SASLogon/login`.
+`--fix` installs missing modules with `pip` and runs `playwright install chromium`. On Linux the
+browser may also need system libraries:
+`sudo python3 -m playwright install-deps chromium`. If the check reports that the Playwright driver
+cannot start because a system library is missing, install that library first; see
+[TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
 
-There are many testcases inside the scenarios folder. You could run any one of the usecase using the command below. 
-There are also soem ready made scripts such as runALL_StudiTests.sh which will run all SAS Studio tests in the scenariso folder. 
+The `local` group runs only when you ask for it. A plain `sas-validation preflight` still checks
+the `client` and `cluster` groups.
 
+## Run a workload
+
+Use any selector that `run` accepts, and add `--local`:
+
+```bash
+# A single test from a scenario, with one user
+sas-validation run --local --scenario helloviya-simple --test tests/logonoff.py --users 1
+
+# An authored workload from an installed plugin
+sas-validation run --local --workload helloviya-simple --plugin-version 2026.09
+
+# A customized workload, with an explicit users file
+sas-validation run --local --custom-workload my-workload --users-file ./users.csv
+
+# Generate the local artifacts without running them
+sas-validation run --local --workload helloviya-simple --generate-only
 ```
-# single user run
-# This will pick one user from the users.csv and run the test 
-locust -H https://yourhost.xyz.com -u 1 --processes 1 --iteration=1 -f scenarios/st_runsleep01.py --only-summary --csv results/st_runsleep01 --headless
 
-Note: The --headless option here is not a Playwright headless option mentioned above, 
-but this is a Locust headless option to run without the Locust Web UI
+Each workload in the definition runs as its own Locust test, with the users, spawn rate,
+iterations, run time, and timeout from the workload definition (and `--workload-overrides`).
+Locust runs in its own headless mode, without the Locust web UI.
 
-# running locust with 3 users and for 5 iterations
-# This will pick 3 users from the users.csv and run the test
-# 3 users running 5 iterations will require you to at least have 15 users in your users.csv file
+### Options for local runs
 
-locust -H https://yourhost.xyz.com --u 3  --processes 3 --iteration=5 -f scenarios/st_runsleep01.py --only-summary --csv results/st_runsleep01 --headless
+| Option | Effect |
+|--------|--------|
+| `--local` | Run Locust on this machine instead of Kubernetes. |
+| `--headed` | Show the Playwright browser windows. The default is headless. |
+| `--processes <n>` | Number of Locust worker processes. The default is the workload's user count, so each user gets its own process (like one worker pod per user in Kubernetes). |
+| `--users-file <file>` | Users CSV; overrides `execution.users-file`. |
+| `--yes` | Install missing Locust/Playwright dependencies without asking. |
 
+### Missing dependencies
+
+Before it generates the workload, `run --local` checks that the Locust and Playwright packages
+and the Playwright Chromium browser are installed for the Python that runs `sas-validation`. If any
+are missing, it lists them and asks whether to install them (`[y/N]`). Answering `y` (or passing `--yes`)
+runs the same fixes as `sas-validation preflight --group local --fix`. Answering `n`, or a failed
+install, stops the run with exit code 2. `--generate-only` skips the check.
+
+The generated script runs the `locust` installed for that same Python, even when it is not on
+`PATH`. Set `SAS_VALIDATION_LOCUST` to the path of another `locust` executable to use a different
+one.
+
+### Headed or headless browsers
+
+- **Headless** (default): the browsers run in the background.
+- **Headed** (`--headed`): a browser window opens for every user so you can watch the test. Use
+  it with 1 to 3 users; the CLI warns when a headed run has more.
+
+The generated script can also be switched when you run it:
+`SAS_VALIDATION_HEADLESS=false ./runWorkloadLocal.sh`.
+
+## Stopping runs and recovering leftover processes
+
+Press **Ctrl+C** once to stop a run. Newly generated local runners supervise Locust in an
+isolated process group and track descendant identities. On completion, failure, timeout, or
+interruption, they stop remaining owned processes, allowing up to 15 seconds for graceful
+shutdown before force-stopping them. This applies to headed and headless runs, including
+direct execution of the generated script. Logs and collected results are preserved.
+
+Each Locust invocation prints `local_run_id=<id>` in its live workload log. Ownership records
+are kept in the current user's platform-specific application state directory, outside the
+generated workload and rotating logs. Inspect them after an abnormal termination:
+
+```bash
+sas-validation cleanup --local --list
+sas-validation cleanup --local --run-id <id>          # preview only
+sas-validation cleanup --local --run-id <id> --stop   # asks for confirmation
 ```
 
-Start the test. You should see the tests progressing.  
+Add `--yes` with `--stop` for non-interactive cleanup. Cleanup validates PID, process creation
+time, user, and process group before signaling; it does not search by executable name or stop
+other local runs. A stale record with no matching processes is removed when cleanup is requested.
+An interrupted run stops rather than proceeding to the next workload.
 
-For more locust options, refer to the following link: 
-https://docs.locust.io/en/stable/quickstart.html#direct-command-line-usage-headless
+`SIGKILL` cannot execute shutdown handlers. Persisted identities allow recovery of recorded
+survivors after the supervisor is killed. Processes that detach and lose their parent before
+being observed cannot be reliably attributed; neither can leftovers from older generated
+scripts or Locust launched by hand. Regenerate existing workloads to enable supervision.
+Avoid blanket commands targeting all Python, Node.js, or Chromium processes.
+
+## Results
+
+The run prints a summary and exits with code 0 when every workload passes, 1 when a workload
+fails, and 2 when the environment is not ready (for example, Locust is not installed). A workload
+fails when Locust reports more than 1% failed requests, when the failures or exceptions results
+have rows, when the Locust output contains errors, or when it does not finish within the workload
+timeout.
+
+```text
+generated/
+  <workload>/
+    <workload>.yaml              # resolved workload definition
+    runWorkloadLocal.sh          # runs Locust for every workload in the definition
+    local/src/                   # test files, common libraries, users.csv, config.json, trustedcerts.pem
+    results/<users>-<name>.csv   # Locust statistics
+    execution-logs/              # <name>-locust.log, failures and exceptions CSVs, run log
+```
+
+`runWorkloadLocal.sh` can be run again without regenerating. Earlier `execution-logs` folders are
+kept as `execution-logs-<timestamp>`.
+
+To run Locust by hand, change to `local/src` and point the users loader at the staged file.
+This bypasses the generated runner's automatic cleanup and ownership tracking:
+
+```bash
+cd generated/<workload>/local/src
+SAS_VALIDATION_USERS_FILE=$PWD/users.csv SAS_VALIDATION_HEADLESS=false \
+  locust -f logonoff.py -H https://my-viya-system.example.com --headless \
+  -u 1 -r 1 --processes 1 --iterations 1 --only-summary
+```
+
+For more Locust options, see the
+[Locust command-line documentation](https://docs.locust.io/en/stable/configuration.html).
+
+## Scenarios that need Kubernetes
+
+Some tests depend on the Locust pod, for example paths under `/lotest/src` or tools installed in
+the Locust image. A scenario marks this in its `scenario-config.yaml`, and `run --local` refuses it
+with a clear message:
+
+```yaml
+scenario-config:
+  id: sas-viya-cli
+  execution-targets: [kubernetes]   # kubernetes, local, or both; omitted means both
+```

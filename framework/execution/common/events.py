@@ -21,13 +21,20 @@ from playwright.async_api import Page, expect, async_playwright, TimeoutError as
 from locust_plugins.csvreader import CSVReader
 from dotenv import load_dotenv, dotenv_values 
 import base64
+import csv
+import gzip
+import io
 import json
+import sys
 import threading
 
 
 from scenario_utils import UsersManager
 
-PlaywrightUser.headless = True 
+# Pods always run headless. Local runs set SAS_VALIDATION_HEADLESS=false to watch the browser.
+PlaywrightUser.headless = os.environ.get("SAS_VALIDATION_HEADLESS", "true").strip().lower() not in (
+    "0", "false", "no", "off"
+)
 
 # Load user credentials from Kubernetes secret
 test_users = UsersManager()
@@ -49,7 +56,8 @@ def on_acknowledge(msg, **kwargs):
 
 @events.init.add_listener
 def on_locust_init(environment, **_kwargs):
-    global start_time
+    global start_time, _environment
+    _environment = environment
     start_time = datetime.now()
     print(f"Start of run: {start_time.strftime('%Y%m%d-%H:%M:%S')}")
     # set up test users for the workers & local runner
@@ -98,3 +106,43 @@ def _(environment, **kw):
     # Calculate duration
     duration = end_time - start_time
     print(f"Duration of the Total test run: {str(duration)}")
+
+
+# Results are published through the master's stdout (the pod log), so runWorkload.sh can read them
+# with `kubectl logs` after the master has exited instead of copying files out of a running container.
+# Each CSV is gzip+base64 encoded onto a single line: "SAS_VALIDATION_RESULT <name> <payload>".
+RESULT_MARKER = "SAS_VALIDATION_RESULT"
+_environment = None
+
+
+def _encode_csv(render):
+    buffer = io.StringIO()
+    render(csv.writer(buffer))
+    compressed = gzip.compress(buffer.getvalue().encode("utf-8"), mtime=0)
+    return base64.b64encode(compressed).decode("ascii")
+
+
+def build_result_lines(environment, exit_code, stats_csv=None):
+    if stats_csv is None:
+        from locust.stats import StatsCSV, PERCENTILES_TO_REPORT
+        stats_csv = StatsCSV(environment, PERCENTILES_TO_REPORT)
+    return [
+        f"{RESULT_MARKER} stats {_encode_csv(stats_csv.requests_csv)}",
+        f"{RESULT_MARKER} failures {_encode_csv(stats_csv.failures_csv)}",
+        f"{RESULT_MARKER} exceptions {_encode_csv(stats_csv.exceptions_csv)}",
+        f"{RESULT_MARKER} exit_code {exit_code}",
+    ]
+
+
+@events.quit.add_listener
+def publish_results(exit_code, **_kwargs):
+    # Fired last during shutdown, after the exit code is final and the summary is printed.
+    if _environment is None or isinstance(_environment.runner, WorkerRunner):
+        return
+    try:
+        lines = build_result_lines(_environment, exit_code)
+    except Exception as exc:  # never block shutdown; the script reports missing results
+        print(f"{RESULT_MARKER} publish_failed {type(exc).__name__}", flush=True)
+        return
+    sys.stdout.write("\n".join(lines) + "\n")
+    sys.stdout.flush()

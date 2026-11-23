@@ -532,6 +532,15 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Complete these manually (1)", text)
         self.assertIn("c: ask an admin", text)
 
+    def test_a_failed_fix_is_listed_as_manual_not_fixable(self):
+        findings = self._findings()
+        findings[1].fix_error = "RuntimeError: pip could not build gevent from source"
+        text = "\n".join(report.render(findings, fixed=True))
+        self.assertNotIn("Fixable automatically", text)
+        self.assertIn("Complete these manually (2)", text)
+        self.assertIn("b: create it", text)
+        self.assertIn("fix failed: RuntimeError: pip could not build gevent", text)
+
     def test_json_output_carries_status_and_fixability(self):
         payload = report.as_json(self._findings())
         self.assertEqual(["a", "b", "c"], [entry["id"] for entry in payload])

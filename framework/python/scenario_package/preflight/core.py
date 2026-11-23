@@ -140,6 +140,8 @@ class PreflightContext:
     hostname: Optional[str] = None
     trusted_certs: Optional[Path] = None
     users_file: Optional[Path] = None
+    # sas-validation.execution.users-file; used by the local checks when --users-file is not given.
+    configured_users_file: Optional[Path] = None
     framework_root: Optional[Path] = None
     config_path: Optional[Path] = None
     config_error: Optional[str] = None

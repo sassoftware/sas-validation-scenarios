@@ -41,6 +41,9 @@ Later we can collect the results from the  different runWorkloads run for analys
 > [!NOTE]  
 > The exceptions and failures files from the locust master pods are  named as the <testname>_exception.csv and <testname>_failures.csv and placed in the execution-logs folder.
 
+> [!IMPORTANT]  
+> A workload is reported as `TESTS PASSED` only when there is evidence that it ran successfully. That means the Locust master finished within the workload timeout and succeeded, it published its results CSVs (they are decoded from the master's log), and the failures and exceptions CSVs plus the pod logs show no errors. If any of these fails, the workload is reported as `TESTS FAILED` with the reasons. At the end of the run, a `WORKLOAD SUMMARY` table lists every workload, and `runWorkload.sh` exits non-zero unless all of them passed. For details and exit codes, see [Workload status and exit codes](../CLI-CHEATSHEET.md#workload-status-and-exit-codes).
+
 Now, to run with a different number of users follow the steps below:
 
 > [!NOTE]  

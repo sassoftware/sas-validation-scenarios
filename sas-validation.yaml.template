@@ -11,4 +11,12 @@ sas-validation:
     destination: generated-workloads
   execution:
     hostname: https://my-viya-system.example.com
-    namespace: testing
+    namespace: validation-scenarios
+    # Trusted CA bundle for the Viya system. It is shipped to the pods as /lotest/src/trustedcerts.pem
+    # for scenarios that declare a 'trusted-certs' dependency, and is used by the preflight checks.
+    # To get it: kubectl -n <viya-namespace> cp <sas-logon-app-pod>:/security/trustedcerts.pem ./trustedcerts.pem
+    # trusted-certs: trustedcerts.pem
+    
+    # Users CSV (one 'user,password' row per user). Required by 'sas-validation run --local',
+    # which reads the users from this file instead of the Kubernetes secret. --users-file overrides it.
+    # users-file: users.csv

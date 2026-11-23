@@ -118,44 +118,37 @@ with open(os.path.join(args.outputPath, "deployTaskResourcesAsConfigMap.sh"), "w
     logging.info(f"Custom module type: {custom_module_type}")
     logging.info(f"Custom module file: {custom_module_file}")
 
-    #If the custom module is a cli-profile, fill the template
-    if custom_module_type == "cli-profile":
-      logging.info(f"Filling the cli-profile template: {custom_module_file}")
+    # config-json (formerly cli-profile): fill the sas-viya CLI profile template with the hostname and ship it as config.json.
+    if custom_module_type in ("config-json", "cli-profile"):
+      logging.info(f"Filling the config-json template: {custom_module_file}")
+      if not hostname or hostname.lower() == "null":
+        logging.error("ERROR: A scenario declares a config-json dependency, but no hostname is configured. "
+                      "Set 'sas-validation.execution.hostname' in sas-validation.yaml.")
+        exit(1)
 
-      with open(custom_module_file, "r") as cli_profile_template_file:
-        templateFile = cli_profile_template_file.read()
-        cli_profile_template = string.Template(templateFile)
+      with open(custom_module_file, "r") as config_json_template_file:
+        config_json_template = string.Template(config_json_template_file.read())
 
-        #Ensure there is not a trailing slash on the hostname
-        if hostname.endswith("/"):
-          hostname = hostname[:-1]
-
-        cli_profile_filled = cli_profile_template.substitute(hostname=hostname)
-        
-        cli_profile = os.path.join(args.resourcesPath, "config.json")
-        logging.debug(f"Writing filled cli-profile to: {cli_profile}")
-
-        #File name is the custom_module_file without the "template" suffix
-        cli_profile_filename = os.path.basename(custom_module_file).replace(".template", "")
-        cli_profile_full_path = os.path.join(args.resourcesPath, cli_profile_filename)
-        with open(cli_profile_full_path, "w") as cli_profile_filled_file:
-          cli_profile_filled_file.write(cli_profile_filled)
-          #Update the custom_module_file to point to the filled file
-          # custom_module["file"] = cli_profile_full_path
-          #Add the filled cli-profile path to the array
-          custom_module_file_paths.add(cli_profile_full_path)
+      config_json_filled = config_json_template.safe_substitute(hostname=hostname.rstrip("/"))
+      config_json_full_path = os.path.join(args.resourcesPath, "config.json")
+      logging.debug(f"Writing filled config.json to: {config_json_full_path}")
+      with open(config_json_full_path, "w") as config_json_filled_file:
+        config_json_filled_file.write(config_json_filled)
+      custom_module_file_paths.add(config_json_full_path)
 
     elif custom_module_type == "trusted-certs":
-      #If the custom module is a trusted-certs, use the trusted-certs path from the global config
+      # The file comes from the trusted-certs setting and is always shipped as trustedcerts.pem.
       logging.info(f"Processing the trusted-certs file from the global config: {certs_file_full_path}")
+      if not certs_file_full_path or certs_file_full_path.lower() == "null":
+        logging.error("ERROR: A scenario declares a trusted-certs dependency, but no trusted certificates file is configured. "
+                      "Set 'sas-validation.execution.trusted-certs' in sas-validation.yaml.")
+        exit(1)
       if os.path.isfile(certs_file_full_path):
         logging.debug(f"PEM file found: {certs_file_full_path}")
-        #Copy the pem file to the resources path
-        shutil.copy(certs_file_full_path, os.path.join(args.resourcesPath, "trustedcerts.pem"))
-        # custom_module["file"] = certs_file_full_path
-        # custom_module_file = certs_file_full_path
-        #Add the filled cli-profile path to the array
-        custom_module_file_paths.add(certs_file_full_path)
+        trusted_certs_copy = os.path.join(args.resourcesPath, "trustedcerts.pem")
+        if os.path.abspath(certs_file_full_path) != os.path.abspath(trusted_certs_copy):
+          shutil.copy(certs_file_full_path, trusted_certs_copy)
+        custom_module_file_paths.add(trusted_certs_copy)
       else:
         logging.error(f"ERROR: PEM file not found: {certs_file_full_path}")
         exit(1)

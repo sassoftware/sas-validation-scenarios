@@ -9,7 +9,7 @@ spec:
   testFiles:
      configMapRef: ${config_map_name}   
   master:
-    command: --locustfile /lotest/src/${task} --host ${hostname} --users ${users} --spawn-rate ${spawn_rate} --iterations=${iterations} --run-time=${run_time} --csv ${csv}
+    command: --locustfile /lotest/src/${task} --host ${hostname} --headless --users ${users} --spawn-rate ${spawn_rate} --iterations=${iterations} --run-time=${run_time} --csv ${csv}
     labels:
       role: master
   worker:

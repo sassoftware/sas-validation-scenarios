@@ -1,6 +1,7 @@
 # Copyright © 2026, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 import os
 import importlib
 import shutil
@@ -731,6 +732,179 @@ class PluginCommonDependencyTests(unittest.TestCase):
                 "file": str(plugin.resolve() / "scenarios/common/plugin_helpers.py"),
             },
             modules,
+        )
+
+
+class TrustedCertsDependencyTests(unittest.TestCase):
+    """`trusted-certs` dependencies ship the configured PEM as trustedcerts.pem."""
+
+    framework_root = Path(__file__).parent.parent / "framework"
+    legacy_dependency = {"type": "trusted-certs", "path": "framework/execution/common", "file": "trustedcerts.pem"}
+
+    @classmethod
+    def _plugin(cls, root: Path, extra_dependencies) -> Path:
+        shutil.copytree(FIXTURE, root, dirs_exist_ok=True)
+        config = root / "scenarios/helloviya-simple/scenario-config.yaml"
+        values = yaml.safe_load(config.read_text(encoding="utf-8"))
+        common_root = cls.framework_root / "execution/common"
+        values["scenario-config"]["dependencies"] = [
+            dependency
+            for dependency in values["scenario-config"]["dependencies"]
+            if dependency.get("type") != "common" or (common_root / dependency["file"]).is_file()
+        ] + list(extra_dependencies)
+        config.write_text(yaml.safe_dump(values, sort_keys=False), encoding="utf-8")
+        return root
+
+    def _generate(self, root: Path, declare, configure: bool, hostname="https://viya.example.com"):
+        if declare is True:
+            declare = [self.legacy_dependency]
+        plugin = self._plugin(root / "plugin", declare or [])
+        certificates = None
+        if configure:
+            certificates = root / "my-ca.pem"
+            certificates.write_text("certificate", encoding="utf-8")
+        result = ScenarioPackage(plugin).generate(
+            "helloviya-simple",
+            root / "output",
+            self.framework_root,
+            hostname=hostname,
+            trusted_certs=certificates,
+            log_level="ERROR",
+        )
+        return result.generated_workload_root / "helloviya-simple"
+
+    def test_bare_dependency_ships_configured_pem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workload_root = self._generate(
+                Path(directory), declare=[{"type": "trusted-certs"}], configure=True
+            )
+            shipped = workload_root / "resources" / "trustedcerts.pem"
+            config_map_script = (workload_root / "deployTaskResourcesAsConfigMap.sh").read_text()
+
+        self.assertEqual(config_map_script.count(f"--from-file={shipped}"), 1)
+
+    def test_declared_dependency_ships_configured_pem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workload_root = self._generate(Path(directory), declare=True, configure=True)
+            shipped = workload_root / "resources" / "trustedcerts.pem"
+            shipped_content = shipped.read_text(encoding="utf-8")
+            config_map_script = (workload_root / "deployTaskResourcesAsConfigMap.sh").read_text()
+
+        self.assertEqual(shipped_content, "certificate")
+        self.assertEqual(config_map_script.count(f"--from-file={shipped}"), 1)
+        self.assertNotIn("my-ca.pem", config_map_script)
+
+    def test_declared_dependency_without_configured_pem_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ManifestError, "Workload generator failed"):
+                self._generate(Path(directory), declare=True, configure=False)
+
+    def test_undeclared_dependency_does_not_ship_pem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workload_root = self._generate(Path(directory), declare=False, configure=True)
+            shipped = (workload_root / "resources" / "trustedcerts.pem").exists()
+            config_map_script = (workload_root / "deployTaskResourcesAsConfigMap.sh").read_text()
+
+        self.assertFalse(shipped)
+        self.assertNotIn(".pem", config_map_script)
+
+
+class ConfigJsonDependencyTests(unittest.TestCase):
+    """`config-json` dependencies ship a framework-generated config.json."""
+
+    framework_root = TrustedCertsDependencyTests.framework_root
+    _plugin = TrustedCertsDependencyTests._plugin
+    _generate = TrustedCertsDependencyTests._generate
+    legacy_dependency = {"type": "cli-profile", "path": "framework/execution/common", "file": "config.json"}
+
+    def _assert_generated_profile(self, workload_root: Path):
+        profile = workload_root / "resources" / "config.json"
+        values = json.loads(profile.read_text(encoding="utf-8"))
+        config_map_script = (workload_root / "deployTaskResourcesAsConfigMap.sh").read_text()
+        self.assertEqual(values["Default"]["sas-endpoint"], "https://viya.example.com")
+        self.assertEqual(values["Default"]["ansi-colors-enabled"], "false")
+        self.assertEqual(config_map_script.count(f"--from-file={profile}"), 1)
+        self.assertNotIn("config.json.template", config_map_script)
+
+    def test_bare_dependency_generates_config_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workload_root = self._generate(
+                Path(directory),
+                declare=[{"type": "config-json"}],
+                configure=False,
+                hostname="https://viya.example.com/",
+            )
+            self._assert_generated_profile(workload_root)
+
+    def test_legacy_cli_profile_name_path_and_file_are_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workload_root = self._generate(
+                Path(directory),
+                declare=[self.legacy_dependency, {"type": "config-json"}],
+                configure=False,
+            )
+            self._assert_generated_profile(workload_root)
+
+    def test_undeclared_dependency_does_not_ship_config_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workload_root = self._generate(Path(directory), declare=[], configure=False)
+            shipped = (workload_root / "resources" / "config.json").exists()
+
+        self.assertFalse(shipped)
+
+    def test_missing_hostname_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ManifestError, "failed"):
+                self._generate(
+                    Path(directory), declare=[{"type": "config-json"}], configure=False, hostname=None
+                )
+
+    def test_generator_warns_about_legacy_name_and_unused_path_and_file(self):
+        generator = self.framework_root / "python/createWorkloadDefinitions.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plugin = self._plugin(root / "plugin", [self.legacy_dependency]).resolve()
+            global_config = root / "global-config.yaml"
+            global_config.write_text(
+                yaml.safe_dump(
+                    {
+                        "global-config": {
+                            "framework-base-location": str(self.framework_root),
+                            "scenarios-base-location": str(plugin / "scenarios"),
+                            "generated-base-location": str(root / "generated"),
+                            "hostname": "https://viya.example.com",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            environment = os.environ.copy()
+            environment["frameworkDefaultsFullPath"] = str(
+                self.framework_root / "framework-defaults.yaml"
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(generator),
+                    "-g",
+                    str(global_config),
+                    "-w",
+                    str(plugin / "workload-definitions/helloviya-simple.yaml"),
+                    "-l",
+                    "WARNING",
+                ],
+                check=True,
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertIn(
+            "dependency type 'cli-profile' is renamed 'config-json'", completed.stderr
+        )
+        self.assertIn(
+            "'path' and 'file' are not used for 'config-json' dependencies", completed.stderr
         )
 
 
