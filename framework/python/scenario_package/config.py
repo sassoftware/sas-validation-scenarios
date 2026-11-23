@@ -21,6 +21,7 @@ class ScenarioPackageDefaults:
     hostname: Optional[str]
     trusted_certs: Optional[Path]
     namespace: Optional[str] = None
+    users_file: Optional[Path] = None
 
 
 @dataclass
@@ -126,6 +127,7 @@ def load_scenario_package_defaults(path: Path) -> ScenarioPackageDefaults:
         hostname=hostname,
         trusted_certs=trusted_certs,
         namespace=namespace,
+        users_file=_optional_path(execution, "execution", "users-file"),
     )
 
 

@@ -1,20 +1,40 @@
 # This file was generated using template: run-workload.sh.template and will be overwritten.
-kubectl -n $namespace apply -f $k8s_cr
-sleep 10s
-LOCUSTRESOURCELIST=$$( kubectl -n $namespace get locusttests.locust.io,pod 2>/dev/null );
+CURRENT_WORKLOAD="${name}"
+WORKLOAD_START=$$SECONDS
+WORKLOAD_TEST_DURATION=""
+wl_reasons=""
+
+kubectl -n $namespace apply -f $k8s_cr || fail_infra "Failed to apply custom resource $k8s_cr for workload ${name}."
+APPLIED_CR="$k8s_cr"
 
 #### Start
 
-MMM1=$$( kubectl -n $namespace get pod -l role='master' --no-headers )
-WWW1=$$( kubectl -n $namespace get pod -l role='worker' --no-headers )
-MMM2=$$( echo "$$MMM1" | awk '{print $$1"_"$$2"_"$$3"_"$$5}' ); MMM2=$$( echo $$MMM2 )
-WWW2=$$( echo "$$WWW1" | awk '{print $$1"_"$$2"_"$$3"_"$$5}' ); WWW2=$$( echo $$WWW2 )
-MASTRPOD=$$( echo "$$MMM1" | grep '2/2' | awk '{print $$1}')
-WRKRPODS=$$( echo "$$WWW1" | grep '1/1' | awk '{print $$1}')
+# The operator creates the pods asynchronously; 'kubectl wait -l' fails at once if none match yet,
+# so first poll until the master and worker pods exist.
+pods_deadline=$$(( SECONDS + 180 ))
+until [ -n "$$( kubectl -n $namespace get pod -l job-name=${name}-test-master --no-headers -o custom-columns=:metadata.name 2>/dev/null )" ] \
+   && [ -n "$$( kubectl -n $namespace get pod -l job-name=${name}-test-worker --no-headers -o custom-columns=:metadata.name 2>/dev/null )" ]; do
+  if [ $$SECONDS -ge $$pods_deadline ]; then
+    add_reason "Locust pods were not created within 180s"
+    break
+  fi
+  sleep 1
+done
 
+# Wait for the master pod to start so that its logs can be captured live.
+if ! kubectl -n $namespace wait --for=condition=ready pod -l job-name=${name}-test-master --timeout=180s; then
+  add_reason "master pod did not become ready"
+fi
+LOCUSTRESOURCELIST=$$( kubectl -n $namespace get locusttests.locust.io,pod 2>/dev/null );
+
+MASTRPOD=$$( kubectl -n $namespace get pod -l job-name=${name}-test-master --no-headers -o custom-columns=:metadata.name 2>/dev/null )
+WRKRPODS=$$( kubectl -n $namespace get pod -l job-name=${name}-test-worker --no-headers -o custom-columns=:metadata.name 2>/dev/null )
+
+LIVE_LOG_PIDS=""
 for iii in $$MASTRPOD $$WRKRPODS; do
     echo "nohup kubectl -n $namespace logs $$iii -f 1> $logs_dir/$$iii.log 2>&1 &"
     nohup kubectl -n $namespace logs $$iii -f 1> $logs_dir/$$iii.log 2>&1 &
+    LIVE_LOG_PIDS="$$LIVE_LOG_PIDS $$!"
 done
 
 
@@ -29,47 +49,149 @@ echo  "tail -f $logs_dir/${name}-test*.log"
 echo""
 echo""
 
-kubectl wait --for=condition=complete job/${name}-test-worker --timeout=${timeout} -n $namespace
-sleep 10s
+# Wait for the Locust master to finish. It runs --headless, so it exits as soon as the last worker
+# finishes, publishes its results to its log, and the operator reports Succeeded or Failed.
+# The only limit is the workload timeout.
+timeout_seconds=$$( duration_to_seconds "${timeout}" )
+if [ "$$timeout_seconds" -lt 0 ]; then
+  echo "WARNING: could not parse workload timeout '${timeout}'; using 3600 seconds."
+  timeout_seconds=3600
+fi
+phase_deadline=$$(( SECONDS + timeout_seconds ))
+echo "Waiting up to ${timeout} for ${name} to finish..."
+while :; do
+  phase=$$( locust_phase "${name}" )
+  case "$$phase" in
+    Succeeded|Failed) break ;;
+  esac
+  if [ $$SECONDS -ge $$phase_deadline ]; then break; fi
+  sleep 2
+done
+echo "${name} LocustTest phase: $$phase"
 
-cat $logs_dir/${name}*.log > $logs_dir/${name}_merged.log
+# The live captures end when the pods terminate; stop them and fetch the complete logs of the
+# finished pods (Kubernetes keeps them until the custom resource is deleted).
+if [ -n "$$LIVE_LOG_PIDS" ]; then
+  kill $$LIVE_LOG_PIDS 2>/dev/null
+  wait $$LIVE_LOG_PIDS 2>/dev/null
+fi
+refetch_log() {
+  # refetch_log <destination> <kubectl logs args...>; keeps the live capture if the fetch fails.
+  local dest="$$1"
+  shift
+  if kubectl -n $namespace logs "$$@" > $logs_dir/.refetch.tmp 2>/dev/null && [ -s $logs_dir/.refetch.tmp ]; then
+    mv $logs_dir/.refetch.tmp "$$dest"
+  else
+    rm -f $logs_dir/.refetch.tmp
+  fi
+}
+for iii in $$MASTRPOD; do
+  refetch_log $logs_dir/$$iii.log $$iii -c ${name}-test-master
+done
+for iii in $$WRKRPODS; do
+  refetch_log $logs_dir/$$iii.log $$iii
+done
 
-MMM1=$$(kubectl -n $namespace get pods | grep master | awk '{print $$1}')
-users=$$(yq e '.spec.masterCommandSeed' $k8s_cr | awk -F'--users ' '{print $$2}' | awk '{print $$1}')
-kubectl cp -n $namespace $namespace/$$MMM1:/home/locust/stats.csv_stats.csv ${stats_location}
-kubectl cp -n $namespace $namespace/$$MMM1:/home/locust/stats.csv_failures.csv $failures_location
-kubectl cp -n $namespace $namespace/$$MMM1:/home/locust/stats.csv_exceptions.csv $exceptions_location
+has_master_log() {
+  local f
+  for f in $logs_dir/${name}-test-master*.log; do
+    if [ -s "$$f" ]; then return 0; fi
+  done
+  return 1
+}
+
+if ! has_master_log; then
+  kubectl -n $namespace logs job/${name}-test-master -c ${name}-test-master > $logs_dir/${name}-test-master.log 2>/dev/null || rm -f $logs_dir/${name}-test-master.log
+fi
+if ! has_master_log; then
+  add_reason "no Locust master log was collected"
+fi
+MASTER_LOGS=$$( ls $logs_dir/${name}-test-master*.log 2>/dev/null )
+# Locust test duration as printed by events.py ("Duration of the Total test run: 0:00:20.069188").
+WORKLOAD_TEST_DURATION=$$( cat $$MASTER_LOGS 2>/dev/null | grep "Duration of the Total test run:" | tail -1 | awk '{print $$NF}' | sed 's/\..*//' )
+
+# Results published by the master (events.py) in its log.
+users=$$(yq e '.spec.master.command // .spec.masterCommandSeed' $k8s_cr 2>/dev/null | awk -F'--users ' '{print $$2}' | awk '{print $$1}')
+missing_results=""
+extract_result stats "${stats_location}" $$MASTER_LOGS || missing_results="$$missing_results stats"
+extract_result failures "$failures_location" $$MASTER_LOGS || missing_results="$$missing_results failures"
+extract_result exceptions "$exceptions_location" $$MASTER_LOGS || missing_results="$$missing_results exceptions"
+master_exit=$$( result_value exit_code $$MASTER_LOGS )
+if [ -n "$$missing_results" ]; then
+  add_reason "master did not publish results ($$RESULT_MARKER lines missing:$$missing_results)"
+fi
+
+case "$$phase" in
+  Succeeded)
+    if [ -n "$$master_exit" ] && [ "$$master_exit" != "0" ]; then
+      add_reason "Locust master reported exit code $$master_exit"
+    fi
+    ;;
+  Failed) add_reason "Locust master failed (LocustTest phase: Failed$${master_exit:+, exit code $$master_exit}); failure ratio above 1% or the master crashed" ;;
+  *) add_reason "Locust test did not finish within ${timeout} (LocustTest phase: $$phase)" ;;
+esac
+
+worker_failed=$$( kubectl -n $namespace get job ${name}-test-worker -o jsonpath='{.status.failed}' 2>/dev/null )
+if [ -n "$$worker_failed" ] && [ "$$worker_failed" != "0" ]; then
+  add_reason "worker job reported $$worker_failed failed pod(s)"
+fi
+
+POD_LOGS=$$( ls $logs_dir/${name}-test-*.log 2>/dev/null )
+if [ -n "$$POD_LOGS" ]; then
+  cat $$POD_LOGS | grep -v "^$$RESULT_MARKER " > $logs_dir/${name}_merged.log
+else
+  : > $logs_dir/${name}_merged.log
+fi
+
 kubectl -n $namespace delete -f $k8s_cr
+APPLIED_CR=""
 
 ### POST PROCESSING FOR RESULTS SUMMARY
 
-cat $logs_dir/${name}*.log | grep error > $logs_dir/${name}_error.log
+failure_rows=$$( csv_data_rows "$failures_location" )
+if [ "$$failure_rows" -gt 0 ]; then
+  add_reason "$$failure_rows failure row(s) in $failures_location"
+fi
+exception_rows=$$( csv_data_rows "$exceptions_location" )
+if [ "$$exception_rows" -gt 0 ]; then
+  add_reason "$$exception_rows exception row(s) in $exceptions_location"
+fi
 
-# echo "Error file is $logs_dir/${name}_error.log "
-if [ -f "$logs_dir/${name}_error.log" ] && [ ! -s "$logs_dir/${name}_error.log" ]; then
+grep -i -E "$$LOG_ERROR_PATTERN" $logs_dir/${name}_merged.log | grep -v -i -E "$$LOG_IGNORE_PATTERN" > $logs_dir/${name}_error.log
+if [ -s "$logs_dir/${name}_error.log" ]; then
+  add_reason "$$(wc -l < $logs_dir/${name}_error.log | tr -d ' ') error line(s) in pod logs ($logs_dir/${name}_error.log)"
+fi
+
+if [ -z "$$wl_reasons" ]; then
+  record_result "${name}" "PASSED" ""
   echo ""
   echo "*******************************"  
   echo " ${name} TESTS PASSED         "
   echo "*******************************" 
 else
+  record_result "${name}" "FAILED" "$$wl_reasons"
   echo "********************************"
   echo " ${name} TESTS FAILED          "
   echo "********************************"
   echo "" 
-  echo "HERE ARE THE EXCEPTIONS:"
-  echo "" 
-  cat $logs_dir/${name}_error.log
-  cat $logs_dir/${name}_error.log | grep error
-  cat $logs_dir/${name}_error.log | grep fail
+  echo "REASONS: $$wl_reasons"
+  if [ -s "$logs_dir/${name}_error.log" ]; then
+    echo "" 
+    echo "HERE ARE THE EXCEPTIONS:"
+    echo "" 
+    cat $logs_dir/${name}_error.log
+  fi
 fi
+CURRENT_WORKLOAD=""
 echo ""
 echo ""
-sleep 5s
 echo "HERE ARE YOUR RESULTS (timings are in milliseconds):"
 echo "----------------------------------------------------"
 echo ""
 
-sed -n "/^Type/,/^Type/p" $logs_dir/${name}-test-master*.log
-sed -n "/^Error/,/^Error/p" $logs_dir/${name}-test-master*.log
-
-sleep 10s
+if has_master_log; then
+  sed -n "/^Type/,/^Type/p" $logs_dir/${name}-test-master*.log
+  sed -n "/^Error/,/^Error/p" $logs_dir/${name}-test-master*.log
+else
+  echo "(no master log available)"
+fi

@@ -5,6 +5,7 @@ import json
 import yaml
 import argparse
 import os
+import shlex
 import string
 from string import Template
 import logging
@@ -92,13 +93,19 @@ with open(os.path.join(args.outputPath, "runWorkload.sh" ), "w") as file:
   file.write(f"\n##########  Logging ########## \n")
 
   results_dir = os.path.join(args.outputPath, "results")
-  run_workload_log_header_doc = run_workload_log_header_template.substitute(logs_dir=logs_dir, logs_base_dir=logs_base_location, results_dir=results_dir)
+  run_workload_log_header_doc = run_workload_log_header_template.substitute(logs_dir=logs_dir, logs_base_dir=logs_base_location, results_dir=results_dir,
+                                                                             namespace=namespace, config_map_name=config_map_name)
   file.write(run_workload_log_header_doc)
   file.write(f"\n\n")
 
+  workload_names = " ".join(shlex.quote(str(workload.get("name"))) for workload in workloads)
+  file.write(f"ALL_WORKLOADS=({workload_names})\n")
+  file.write("run_precheck\n\n")
+
   config_map_cmd = os.path.join(args.outputPath, "deployTaskResourcesAsConfigMap.sh")
   file.write(f"##########  Deploy the config map ########## \n")
-  file.write(f"{config_map_cmd} \n")
+  file.write(f"kubectl -n {namespace} delete configmap {config_map_name} --ignore-not-found >/dev/null 2>&1\n")
+  file.write(f"{config_map_cmd} || fail_infra \"Failed to deploy configmap '{config_map_name}' to namespace '{namespace}'.\"\n")
 
   for workload in workloads:
     workload_name = workload.get("name")
@@ -124,8 +131,9 @@ with open(os.path.join(args.outputPath, "runWorkload.sh" ), "w") as file:
     file.write(run_workload_doc)
     file.write(f"\n########## {workload_name} - End   #############\n")
 
-  file.write(f"\n\n##########  Cleanup   #############\n")
-  file.write(f" kubectl -n {namespace} delete configmap {config_map_name} ")
+  file.write(f"\n\n##########  Summary   #############\n")
+  file.write("# The configmap and any remaining custom resources are removed by the EXIT trap.\n")
+  file.write("if print_summary; then\n  exit 0\nfi\nexit 1\n")
   file.close
 
   #Make the script executable

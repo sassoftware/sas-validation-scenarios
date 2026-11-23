@@ -1,0 +1,103 @@
+# This file was generated using template: run-workload-local.sh.template and will be overwritten.
+CURRENT_WORKLOAD="${name}"
+WORKLOAD_START=$$SECONDS
+WORKLOAD_TEST_DURATION=""
+wl_reasons=""
+
+timeout_seconds=$$( duration_to_seconds "${timeout}" )
+if [ "$$timeout_seconds" -lt 0 ]; then
+  echo "WARNING: could not parse workload timeout '${timeout}'; using 3600 seconds."
+  timeout_seconds=3600
+fi
+
+locust_args=(--locustfile ${task} --host ${hostname} --headless --users ${users} --spawn-rate ${spawn_rate} --iterations ${iterations} --run-time ${run_time} --processes ${processes} --only-summary)
+
+echo ""
+echo "Running ${name} with Locust: ${users} user(s), ${processes} process(es), Playwright headless=$$HEADLESS"
+echo "cd ${src_dir} && SAS_VALIDATION_HEADLESS=$$HEADLESS SAS_VALIDATION_USERS_FILE=$$USERS_FILE $$LOCUST $${locust_args[*]}"
+echo ""
+echo "LIVE LOG: tail -f ${workload_log}"
+echo ""
+
+: > ${workload_log}
+( cd ${src_dir} && SAS_VALIDATION_HEADLESS="$$HEADLESS" SAS_VALIDATION_USERS_FILE="$$USERS_FILE" exec "$$PYTHON" "$$SUPERVISOR" run "$$LOCUST" "$${locust_args[@]}" ) > ${workload_log} 2>&1 &
+LOCUST_PID=$$!
+"$$PYTHON" "$$SUPERVISOR" tail ${workload_log} &
+TAIL_PID=$$!
+
+# Locust stops by itself after --iterations or --run-time; the workload timeout is the hard limit.
+timed_out=0
+deadline=$$(( SECONDS + timeout_seconds ))
+while kill -0 $$LOCUST_PID 2>/dev/null; do
+  if [ $$SECONDS -ge $$deadline ]; then
+    timed_out=1
+    echo "${name} did not finish within ${timeout}; stopping Locust."
+    stop_locust
+    break
+  fi
+  sleep 1
+done
+wait $$LOCUST_PID 2>/dev/null
+locust_exit=$$?
+LOCUST_PID=""
+stop_tail
+if [ "$$locust_exit" -ge 128 ] && [ $$timed_out -eq 0 ]; then
+  record_result "${name}" "FAILED" "Local run interrupted (exit $$locust_exit)"
+  CURRENT_WORKLOAD=""
+  print_summary
+  exit "$$locust_exit"
+fi
+
+# Locust test duration as printed by events.py ("Duration of the Total test run: 0:00:20.069188").
+WORKLOAD_TEST_DURATION=$$( grep "Duration of the Total test run:" ${workload_log} 2>/dev/null | tail -1 | awk '{print $$NF}' | sed 's/\..*//' )
+
+if [ $$timed_out -eq 1 ]; then
+  add_reason "Locust test did not finish within ${timeout}"
+elif [ "$$locust_exit" != "0" ]; then
+  add_reason "Locust exited with code $$locust_exit; failure ratio above 1% or the run crashed"
+fi
+
+# Results published by the Locust master (events.py) in its output, in the same layout as Kubernetes runs.
+missing_results=""
+extract_result stats ${stats_location} ${workload_log} || missing_results="$$missing_results stats"
+extract_result failures ${failures_location} ${workload_log} || missing_results="$$missing_results failures"
+extract_result exceptions ${exceptions_location} ${workload_log} || missing_results="$$missing_results exceptions"
+if [ -n "$$missing_results" ]; then
+  add_reason "Locust master did not publish results ($$RESULT_MARKER lines missing:$$missing_results)"
+fi
+
+failure_rows=$$( csv_data_rows ${failures_location} )
+if [ "$$failure_rows" -gt 0 ]; then
+  add_reason "$$failure_rows failure row(s) in ${failures_location}"
+fi
+exception_rows=$$( csv_data_rows ${exceptions_location} )
+if [ "$$exception_rows" -gt 0 ]; then
+  add_reason "$$exception_rows exception row(s) in ${exceptions_location}"
+fi
+
+grep -v "^$$RESULT_MARKER " ${workload_log} 2>/dev/null | grep -i -E "$$LOG_ERROR_PATTERN" | grep -v -i -E "$$LOG_IGNORE_PATTERN" > ${error_log}
+if [ -s ${error_log} ]; then
+  add_reason "$$(wc -l < ${error_log} | tr -d ' ') error line(s) in the Locust log (${error_log})"
+fi
+
+if [ -z "$$wl_reasons" ]; then
+  record_result "${name}" "PASSED" ""
+  echo ""
+  echo "*******************************"
+  echo " ${name} TESTS PASSED         "
+  echo "*******************************"
+else
+  record_result "${name}" "FAILED" "$$wl_reasons"
+  echo "********************************"
+  echo " ${name} TESTS FAILED          "
+  echo "********************************"
+  echo ""
+  echo "REASONS: $$wl_reasons"
+  if [ -s ${error_log} ]; then
+    echo ""
+    echo "HERE ARE THE EXCEPTIONS:"
+    echo ""
+    cat ${error_log}
+  fi
+fi
+CURRENT_WORKLOAD=""

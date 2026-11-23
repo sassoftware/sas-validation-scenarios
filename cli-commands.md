@@ -55,7 +55,23 @@ sas-validation auth status --repo <alias>   # which token source a private GitLa
 `--plugin-version <version>` and `--repo <alias>` to choose among installed plugins.
 
 Workflow commands remain top-level because they describe an end-to-end operation:
-`run` and `preflight`.
+`run` and `preflight`. `run --local` runs Locust on the current machine instead of
+Kubernetes (`--headed`, `--processes`, `--yes` to install missing Locust/Playwright
+dependencies without asking); `preflight --group local` checks that machine.
+
+Local process recovery is also top-level:
+
+```text
+sas-validation cleanup --local --list
+sas-validation cleanup --local --run-id <id>                 # preview
+sas-validation cleanup --local --run-id <id> --stop          # confirm and stop
+sas-validation cleanup --local --run-id <id> --stop --yes    # non-interactive
+```
+
+Newly generated local runners automatically clean up owned processes after failures and
+interruptions. Cleanup operates only on tracked, identity-validated processes for the selected
+run, allowing 15 seconds before force-stopping survivors. It does not clean up Kubernetes resources.
+See [local process recovery](documentation/GETTING-STARTED-WITH-RUNNING-LOCUST-LOCALLY.md#stopping-runs-and-recovering-leftover-processes).
 
 `resolve`, `prepare`, and `generate` from the argparse-era sketch were removed in the
 Typer-based CLI redesign; `generate`'s behavior is folded into `run`. See

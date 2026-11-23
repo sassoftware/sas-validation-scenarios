@@ -841,8 +841,33 @@ class ValidateCommandTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn("1 plugin(s) validated, 0 failed", result.output)
 
+    def test_legacy_name_and_unused_path_are_warnings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plugin_root = _install_fixture(root / "plugins", PLATFORM, "2026.09")
+            config = plugin_root / "scenarios" / "helloviya-simple" / "scenario-config.yaml"
+            values = yaml.safe_load(config.read_text(encoding="utf-8"))
+            values["scenario-config"].setdefault("dependencies", []).extend(
+                [
+                    {"type": "cli-profile", "path": "framework/execution/common", "file": "config.json"},
+                    {"type": "trusted-certs"},
+                ]
+            )
+            config.write_text(yaml.safe_dump(values, sort_keys=False), encoding="utf-8")
+            text = _invoke(root, "plugins", "validate", "--destination", str(root / "plugins"))
+            as_json = _invoke(
+                root, "plugins", "validate", "--destination", str(root / "plugins"), "--json"
+            )
 
-class ListCommandTests(unittest.TestCase):
+        self.assertEqual(text.exit_code, 0, text.output)
+        self.assertIn("PASS", text.output)
+        self.assertIn("WARNING:", text.output)
+        payload = json.loads(as_json.output)
+        self.assertTrue(payload[0]["valid"])
+        warnings_ = payload[0]["warnings"]
+        self.assertEqual(len(warnings_), 2)
+        self.assertIn("type 'cli-profile' is renamed 'config-json'", warnings_[0])
+        self.assertIn("(config-json): 'path' and 'file' are not used", warnings_[1])
     def test_list_shows_repo_and_filters_by_repo(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1,0 +1,247 @@
+## filename: run-workload-local-header.sh.template
+
+##########  Logging ##########
+
+# Rename the execution logs directory
+timestamp=`date +%Y%m%d%H%M%S`
+if [ -d ${logs_dir} ] ; then
+   echo "Renaming the existing 'execution-logs' directory to 'execution-logs-'$$timestamp."
+   mv ${logs_dir} ${logs_base_dir}/execution-logs-$$timestamp
+fi
+
+# Redirect stdout and stderr to a log file with a timestamp
+mkdir -p ${logs_dir}
+mkdir -p ${results_dir}
+timestamp=`date +%Y%m%d%H%M%S`
+exec 3>&1 4>&2
+exec > >(tee -a ${logs_dir}/runWorkload_$$timestamp.log) 2>&1
+TEE_PID=$$!
+
+##########  Settings ##########
+
+SRC_DIR=${src_dir}
+USERS_FILE=${users_file}
+# Playwright browser mode; override when running this script: SAS_VALIDATION_HEADLESS=false ./runWorkloadLocal.sh
+HEADLESS="$${SAS_VALIDATION_HEADLESS:-${headless_default}}"
+# Locust executable; override with SAS_VALIDATION_LOCUST.
+LOCUST="$${SAS_VALIDATION_LOCUST:-locust}"
+PYTHON=${python}
+SUPERVISOR=${supervisor}
+
+##########  Status tracking ##########
+# Exit codes: 0 = every workload PASSED, 1 = at least one workload FAILED,
+#             2 = infrastructure/precheck error (run aborted), 130 = interrupted.
+# Kept compatible with bash 3.2 (macOS): indexed arrays only.
+
+ALL_WORKLOADS=()
+WORKLOAD_NAMES=()
+WORKLOAD_STATUS=()
+WORKLOAD_REASONS=()
+WORKLOAD_ELAPSED=()
+WORKLOAD_TEST_RUN=()
+CURRENT_WORKLOAD=""
+WORKLOAD_START=""
+WORKLOAD_TEST_DURATION=""
+LOCUST_PID=""
+TAIL_PID=""
+wl_reasons=""
+
+# Case-insensitive patterns used to scan the Locust logs. Override with environment variables if needed.
+LOG_ERROR_PATTERN="$${SAS_VALIDATION_LOG_ERROR_PATTERN:-error|traceback|exception}"
+LOG_IGNORE_PATTERN="$${SAS_VALIDATION_LOG_IGNORE_PATTERN:-^ *error report *$$|# *occurrences +error}"
+RESULT_MARKER="SAS_VALIDATION_RESULT"
+
+# Convert a duration such as 90, 45s, 30m, 1h or 1h30m to seconds; prints -1 if it can't be parsed.
+duration_to_seconds() {
+  echo "$$1" | awk '{
+    s = $$0; t = 0
+    while (match(s, /^[0-9]+[hms]?/)) {
+      tok = substr(s, 1, RLENGTH); s = substr(s, RLENGTH + 1)
+      u = substr(tok, length(tok)); n = tok + 0
+      if (u == "h") t += n * 3600; else if (u == "m") t += n * 60; else t += n
+    }
+    if (s != "" || $$0 == "") t = -1
+    print t
+  }'
+}
+
+add_reason() {
+  if [ -z "$$wl_reasons" ]; then
+    wl_reasons="$$1"
+  else
+    wl_reasons="$$wl_reasons; $$1"
+  fi
+}
+
+record_result() {
+  WORKLOAD_NAMES+=("$$1")
+  WORKLOAD_STATUS+=("$$2")
+  WORKLOAD_REASONS+=("$$3")
+  if [ -n "$$WORKLOAD_START" ]; then
+    WORKLOAD_ELAPSED+=("$$(format_duration $$(( SECONDS - WORKLOAD_START )))")
+  else
+    WORKLOAD_ELAPSED+=("-")
+  fi
+  WORKLOAD_TEST_RUN+=("$${WORKLOAD_TEST_DURATION:--}")
+}
+
+# Format seconds as H:MM:SS.
+format_duration() {
+  printf "%d:%02d:%02d" $$(( $$1 / 3600 )) $$(( $$1 % 3600 / 60 )) $$(( $$1 % 60 ))
+}
+
+# Number of data rows (excluding the header) in a CSV file; 0 if the file is missing.
+csv_data_rows() {
+  if [ -s "$$1" ]; then
+    awk 'NR > 1 && NF > 0' "$$1" | wc -l | tr -d ' '
+  else
+    echo 0
+  fi
+}
+
+# Value of a "SAS_VALIDATION_RESULT <key> <value>" line published by the Locust master (events.py).
+# Usage: result_value <key> <log file>...
+result_value() {
+  local key="$$1"
+  shift
+  cat "$$@" 2>/dev/null | grep "^$$RESULT_MARKER $$key " | tail -1 | awk '{print $$3}'
+}
+
+# Decode a published gzip+base64 CSV into a file. Usage: extract_result <key> <dest> <log file>...
+extract_result() {
+  local key="$$1" dest="$$2" payload
+  shift 2
+  payload=$$(result_value "$$key" "$$@")
+  [ -n "$$payload" ] || return 1
+  if ! printf '%s' "$$payload" | base64 --decode 2>/dev/null | gunzip > "$$dest" 2>/dev/null; then
+    rm -f "$$dest"
+    return 1
+  fi
+}
+
+print_summary() {
+  local i j name status reason recorded overall=0
+  echo ""
+  echo "=============================================================="
+  echo " WORKLOAD SUMMARY"
+  echo "=============================================================="
+  printf "%-40s %-8s %s\n" "WORKLOAD" "STATUS" "REASON"
+  for ((i = 0; i < $${#WORKLOAD_NAMES[@]}; i++)); do
+    printf "%-40s %-8s %s\n" "$${WORKLOAD_NAMES[$$i]}" "$${WORKLOAD_STATUS[$$i]}" "$${WORKLOAD_REASONS[$$i]}"
+    if [ "$${WORKLOAD_STATUS[$$i]}" != "PASSED" ]; then
+      overall=1
+    fi
+  done
+  for name in "$${ALL_WORKLOADS[@]}"; do
+    recorded=0
+    for ((j = 0; j < $${#WORKLOAD_NAMES[@]}; j++)); do
+      if [ "$${WORKLOAD_NAMES[$$j]}" = "$$name" ]; then recorded=1; fi
+    done
+    if [ $$recorded -eq 0 ]; then
+      printf "%-40s %-8s %s\n" "$$name" "NOT RUN" "run aborted before this workload started"
+      overall=1
+    fi
+  done
+  if [ $${#WORKLOAD_NAMES[@]} -eq 0 ] && [ $${#ALL_WORKLOADS[@]} -eq 0 ]; then
+    echo "(no workloads were executed)"
+    overall=1
+  fi
+  echo "=============================================================="
+  echo " DURATIONS (H:MM:SS)"
+  echo "=============================================================="
+  printf "%-40s %-12s %s\n" "WORKLOAD" "TEST RUN" "ELAPSED"
+  for ((i = 0; i < $${#WORKLOAD_NAMES[@]}; i++)); do
+    printf "%-40s %-12s %s\n" "$${WORKLOAD_NAMES[$$i]}" "$${WORKLOAD_TEST_RUN[$$i]}" "$${WORKLOAD_ELAPSED[$$i]}"
+  done
+  printf "%-40s %-12s %s\n" "TOTAL RUN" "" "$$(format_duration $$SECONDS)"
+  echo "TEST RUN = Locust test duration; ELAPSED = run and result collection."
+  echo "=============================================================="
+  if [ $$overall -eq 0 ]; then
+    echo " OVERALL: PASSED"
+  else
+    echo " OVERALL: FAILED"
+  fi
+  echo "=============================================================="
+  return $$overall
+}
+
+# Abort the whole run on an environment failure (Locust missing, users file missing...).
+fail_infra() {
+  echo ""
+  echo "********************************"
+  echo " ENVIRONMENT ERROR - RUN ABORTED"
+  echo "********************************"
+  echo "$$1"
+  echo "Run 'sas-validation preflight --group local' to diagnose the local setup."
+  if [ -n "$$CURRENT_WORKLOAD" ]; then
+    record_result "$$CURRENT_WORKLOAD" "ERROR" "$$1"
+    CURRENT_WORKLOAD=""
+  fi
+  print_summary
+  exit 2
+}
+
+# The supervisor gives Locust and its descendants 15 seconds before escalation.
+stop_locust() {
+  if [ -n "$$LOCUST_PID" ] && kill -0 "$$LOCUST_PID" 2>/dev/null; then
+    kill -TERM "$$LOCUST_PID" 2>/dev/null
+    local waited=0
+    while kill -0 "$$LOCUST_PID" 2>/dev/null && [ $$waited -lt 20 ]; do
+      sleep 1
+      waited=$$(( waited + 1 ))
+    done
+    if kill -0 "$$LOCUST_PID" 2>/dev/null; then
+      echo "ERROR: local supervisor did not stop; use 'sas-validation cleanup --local --list' for recovery."
+      kill -KILL "$$LOCUST_PID" 2>/dev/null
+    fi
+    wait "$$LOCUST_PID" 2>/dev/null
+  fi
+}
+
+stop_tail() {
+  if [ -n "$$TAIL_PID" ]; then
+    kill "$$TAIL_PID" 2>/dev/null
+    local waited=0
+    while kill -0 "$$TAIL_PID" 2>/dev/null && [ $$waited -lt 20 ]; do
+      sleep 0.1
+      waited=$$(( waited + 1 ))
+    done
+    if kill -0 "$$TAIL_PID" 2>/dev/null; then
+      echo "WARNING: forcing the live log follower to stop."
+      kill -KILL "$$TAIL_PID" 2>/dev/null
+    fi
+    wait "$$TAIL_PID" 2>/dev/null
+    TAIL_PID=""
+  fi
+}
+
+on_exit() {
+  local rc=$$?
+  trap - EXIT
+  trap '' INT TERM HUP
+  stop_locust
+  stop_tail
+  exec 2>&4 1>&3
+  local waited=0
+  while kill -0 "$$TEE_PID" 2>/dev/null && [ $$waited -lt 20 ]; do
+    sleep 0.1
+    waited=$$(( waited + 1 ))
+  done
+  if kill -0 "$$TEE_PID" 2>/dev/null; then
+    echo "WARNING: forcing the run log writer to stop; its output may be incomplete." >&2
+    kill -KILL "$$TEE_PID" 2>/dev/null
+  fi
+  wait "$$TEE_PID" 2>/dev/null
+  exit $$rc
+}
+trap on_exit EXIT
+trap 'echo "Interrupted."; exit 130' INT TERM HUP
+
+##########  Precheck ##########
+
+run_precheck() {
+  command -v "$$LOCUST" >/dev/null 2>&1 || fail_infra "'$$LOCUST' was not found on PATH. Install the local extras: pip install -e '.[local]', or set SAS_VALIDATION_LOCUST to the locust executable"
+  "$$PYTHON" -c 'import psutil, platformdirs' || fail_infra "Local process supervision dependencies are missing; reinstall sas-validation."
+  [ -s "$$USERS_FILE" ] || fail_infra "The users file is missing or empty: $$USERS_FILE"
+  echo "Playwright headless: $$HEADLESS"
+}

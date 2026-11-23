@@ -91,6 +91,73 @@ def read_plugin_common_dependencies(path: Path) -> List[Path]:
     return plugin_common_dependencies(values, path)
 
 
+EXECUTION_TARGET_KUBERNETES = "kubernetes"
+EXECUTION_TARGET_LOCAL = "local"
+EXECUTION_TARGETS = (EXECUTION_TARGET_KUBERNETES, EXECUTION_TARGET_LOCAL)
+
+
+def execution_targets(values: Mapping[str, Any], path: Path) -> Optional[List[str]]:
+    """The optional 'execution-targets' list; None when the scenario runs everywhere."""
+    raw_targets = values.get("execution-targets")
+    if raw_targets is None:
+        return None
+    if isinstance(raw_targets, str):
+        raw_targets = [raw_targets]
+    if not isinstance(raw_targets, list) or not raw_targets:
+        raise ManifestError(f"{path}: 'execution-targets' must be a non-empty list")
+    unknown = [value for value in raw_targets if value not in EXECUTION_TARGETS]
+    if unknown:
+        raise ManifestError(
+            f"{path}: 'execution-targets' has unknown value(s) {', '.join(map(str, unknown))}; "
+            f"expected {' or '.join(EXECUTION_TARGETS)}"
+        )
+    return list(dict.fromkeys(raw_targets))
+
+
+def read_execution_targets(path: Path) -> Optional[List[str]]:
+    values = _load_yaml(path)
+    if "scenario-config" in values:
+        values = values["scenario-config"]
+    if not isinstance(values, Mapping):
+        raise ManifestError(f"{path}: scenario metadata must be a mapping")
+    return execution_targets(values, path)
+
+
+# Dependency types whose file is produced by the framework; 'path' and 'file' are not used.
+GENERATED_DEPENDENCY_TYPES = ("config-json", "trusted-certs")
+# Former dependency type names, still accepted.
+RENAMED_DEPENDENCY_TYPES = {"cli-profile": "config-json"}
+
+
+def dependency_warnings(path: Path) -> List[str]:
+    """Warn about renamed dependency types and unused 'path'/'file' on framework-produced ones."""
+    values = _load_yaml(path)
+    values = values.get("scenario-config", values) if isinstance(values, Mapping) else {}
+    raw_dependencies = values.get("dependencies") if isinstance(values, Mapping) else None
+    if not isinstance(raw_dependencies, list):
+        return []
+    warnings = []
+    for index, dependency in enumerate(raw_dependencies):
+        if not isinstance(dependency, Mapping):
+            continue
+        dependency_type = dependency.get("type")
+        if dependency_type in RENAMED_DEPENDENCY_TYPES:
+            warnings.append(
+                f"{path}: dependencies[{index}]: type '{dependency_type}' is renamed "
+                f"'{RENAMED_DEPENDENCY_TYPES[dependency_type]}'"
+            )
+            dependency_type = RENAMED_DEPENDENCY_TYPES[dependency_type]
+        if dependency_type not in GENERATED_DEPENDENCY_TYPES:
+            continue
+        unused = [field for field in ("path", "file") if dependency.get(field) is not None]
+        if unused:
+            warnings.append(
+                f"{path}: dependencies[{index}] ({dependency_type}): "
+                f"{' and '.join(repr(field) for field in unused)} are not used and can be removed"
+            )
+    return warnings
+
+
 @dataclass(frozen=True)
 class ScenarioReference:
     identifier: str
@@ -155,6 +222,11 @@ class ScenarioManifest:
     workload_definitions: List[Path]
     required_resources: List[Path]
     plugin_common: List[Path] = field(default_factory=list)
+    # Where the scenario can run; None means every target.
+    execution_targets: Optional[List[str]] = None
+
+    def supports_target(self, target: str) -> bool:
+        return self.execution_targets is None or target in self.execution_targets
 
     @classmethod
     def from_file(cls, path: Path) -> "ScenarioManifest":
@@ -225,4 +297,5 @@ class ScenarioManifest:
             workload_definitions=workload_definitions,
             required_resources=required_resources,
             plugin_common=plugin_common_dependencies(values, path),
+            execution_targets=execution_targets(values, path),
         )

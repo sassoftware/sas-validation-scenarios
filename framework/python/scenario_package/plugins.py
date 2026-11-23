@@ -18,7 +18,7 @@ from typing import Iterable, List, Mapping, Optional, Sequence
 import yaml
 
 from .loader import ScenarioPackage
-from .manifest import ManifestError
+from .manifest import ManifestError, dependency_warnings
 from .providers import ReleaseAsset, ReleaseSummary, RepositoryAlias
 
 INSTALL_RECORD_FILENAME = ".sas-validation-plugin.yaml"
@@ -283,3 +283,21 @@ def validate_plugin(plugin_root: Path) -> List[str]:
         if summary.error is not None
     )
     return errors
+
+
+def plugin_warnings(plugin_root: Path) -> List[str]:
+    """Return non-fatal findings in an installed plugin; they do not make it invalid."""
+    try:
+        package = ScenarioPackage(plugin_root)
+    except ManifestError:
+        return []
+    warnings: List[str] = []
+    for reference in package.release.scenarios:
+        config = package.root / reference.path / "scenario-config.yaml"
+        if not config.is_file():
+            continue
+        try:
+            warnings.extend(dependency_warnings(config))
+        except ManifestError:
+            continue
+    return warnings

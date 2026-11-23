@@ -6,6 +6,7 @@
 import json
 import os
 import shutil
+import sys
 import warnings
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,12 +15,13 @@ from typing import Callable, List, NoReturn, Optional
 
 import typer
 from platformdirs import user_cache_path
+import psutil
 
 # Suppress harmless urllib3 LibreSSL warning on macOS (urllib3 v2 works fine with LibreSSL,
 # just not officially tested against it)
 warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
 
-from . import plugins, preflight
+from . import local_processes, plugins, preflight
 from .config import (
     ScenarioPackageDefaults,
     load_repository_config,
@@ -40,6 +42,8 @@ from .providers import ProviderError, RepositoryAlias, create_provider
 PACKAGE_CONFIG_FILENAME = "sas-validation.yaml"
 REPOSITORIES_CONFIG_FILENAME = "scenario-repositories.yaml"
 ALLOWED_LOG_LEVELS = {"WARN", "WARNING", "INFO", "DEBUG"}
+# Above this many users, --headed opens an impractical number of browser windows.
+HEADED_USERS_WARNING_THRESHOLD = 3
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -451,6 +455,70 @@ def _fail(message: str) -> NoReturn:
     raise typer.Exit(code=2)
 
 
+LOCAL_EXTRA_HINT = (
+    "Install them with: pip install --prefer-binary -e '.[local]' "
+    "(from the sas-validation-scenarios directory), "
+    "or run: sas-validation preflight --group local --fix"
+)
+
+
+def _ensure_local_dependencies(assume_yes: bool) -> None:
+    """Make sure Locust, Playwright and its browser are available before a local run.
+
+    Missing pieces are installed into the interpreter running sas-validation, after
+    confirmation unless assume_yes is set.
+    """
+    checks = preflight.local_checks.dependency_checks()
+    context = preflight.PreflightContext(environ=os.environ, timeout=60.0)
+    findings = preflight.run_checks(checks, context)
+    failing = [f for f in findings if f.result.status is not preflight.Status.OK]
+    if not failing:
+        return
+
+    print("Running locally needs Locust and Playwright, but this environment is missing:")
+    for finding in failing:
+        print(f"  {finding.check.title}: {finding.result.detail}")
+    version = preflight.run_checks([preflight.local_checks.python_version_check()], context)[0]
+    if version.result.status is not preflight.Status.OK:
+        print(f"WARNING: {version.result.detail}. {version.result.remedy}.")
+    _abort_on_manual_steps(findings)
+    for line in preflight.report.render_plan(findings, context):
+        print(line)
+    if not assume_yes and not _confirm(
+        f"Install them now into {sys.executable}? [y/N] "
+    ):
+        _fail(f"Run aborted: the local dependencies are missing. {LOCAL_EXTRA_HINT}")
+
+    findings = preflight.apply_fixes(
+        checks,
+        findings,
+        context,
+        on_fix_start=_on_fix_start,
+        on_fix_complete=_on_fix_complete,
+    )
+    _abort_on_manual_steps(findings)
+    remaining = [f for f in findings if f.result.status is not preflight.Status.OK]
+    if remaining:
+        titles = ", ".join(f.check.title for f in remaining)
+        _fail(
+            f"Run aborted: the local dependencies are still missing ({titles}); "
+            f"see the error above. {LOCAL_EXTRA_HINT}"
+        )
+
+
+def _abort_on_manual_steps(findings: List) -> None:
+    """Stop when a dependency failed in a way the automatic install cannot fix."""
+    manual = [
+        f for f in findings
+        if f.result.status is preflight.Status.FAIL and not f.fixable and not f.fix_error
+    ]
+    if manual:
+        steps = "; ".join(
+            f"{f.check.title}: {f.result.detail}. {f.result.remedy or ''}".strip() for f in manual
+        )
+        _fail(f"Run aborted, complete this manually first: {steps}")
+
+
 def _run_preflight(args: SimpleNamespace, package_config: Path) -> int:
     defaults, config_error = _lenient_defaults(package_config)
     trusted_certs = defaults.trusted_certs if defaults else None
@@ -459,6 +527,7 @@ def _run_preflight(args: SimpleNamespace, package_config: Path) -> int:
         hostname=args.hostname or (defaults.hostname if defaults else None),
         trusted_certs=trusted_certs,
         users_file=_existing_file(args.users_file, "--users-file"),
+        configured_users_file=defaults.users_file if defaults else None,
         framework_root=args.framework_root or (defaults.framework_root if defaults else None),
         config_path=package_config,
         config_error=config_error,
@@ -1083,17 +1152,20 @@ def plugins_validate(
     results = []
     for root in roots:
         errors = plugins.validate_plugin(root)
+        warnings_ = plugins.plugin_warnings(root)
         try:
             release = ScenarioPackage(root).release
             name, version = release.name, release.version
         except ManifestError:
             name, version = None, None
         results.append(
-            {"name": name, "version": version, "root": str(root), "valid": not errors, "errors": errors}
+            {"name": name, "version": version, "root": str(root), "valid": not errors, "errors": errors,
+             "warnings": warnings_}
         )
     for entry in broken:
         results.append(
-            {"name": None, "version": None, "root": str(entry.root), "valid": False, "errors": [entry.error]}
+            {"name": None, "version": None, "root": str(entry.root), "valid": False, "errors": [entry.error],
+             "warnings": []}
         )
 
     failed = sum(1 for result in results if not result["valid"])
@@ -1107,6 +1179,8 @@ def plugins_validate(
             print(f"{'PASS' if result['valid'] else 'FAIL'}  {label}{result['root']}")
             for error in result["errors"]:
                 print(f"  - {error}")
+            for warning in result["warnings"]:
+                print(f"  WARNING: {warning}")
         print(f"{len(results)} plugin(s) validated, {failed} failed")
     if failed:
         raise typer.Exit(code=1)
@@ -1279,15 +1353,43 @@ def run(
     log_level: str = typer.Option(
         "INFO", "--log-level", help="Log level: WARN, WARNING, INFO or DEBUG"
     ),
+    local: bool = typer.Option(
+        False,
+        "--local",
+        help=(
+            "Run Locust on this machine instead of Kubernetes; needs a users file "
+            "(--users-file or sas-validation.execution.users-file) and the 'local' extra "
+            "of the sas-validation package"
+        ),
+    ),
+    headed: bool = typer.Option(
+        False,
+        "--headed",
+        help="With --local, show the Playwright browser windows (headless by default)",
+    ),
+    processes: Optional[int] = typer.Option(
+        None,
+        "--processes",
+        min=1,
+        help="With --local, number of Locust worker processes (default: the workload's user count)",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="With --local, install missing Locust/Playwright dependencies without prompting",
+    ),
 ) -> None:
     """Generate a workload and run it.
 
     Choose one of: --workload, --custom-workload, or --scenario with --test.
-    Requires sas-validation.execution.hostname in the config.
+    Requires sas-validation.execution.hostname in the config. Use --local to run
+    Locust on this machine instead of in Kubernetes.
     """
     state = ctx.obj
     try:
         ad_hoc = scenario is not None or test is not None
+        if not local and (headed or processes is not None or yes):
+            raise typer.BadParameter("--headed, --processes and --yes require --local")
         if custom_workload is not None and workload_definition is not None:
             raise typer.BadParameter(
                 "Specify either --custom-workload or --workload-definition, not both"
@@ -1318,6 +1420,17 @@ def run(
         if output is None:
             raise ManifestError(
                 "--output is required (or set 'output.destination' in --config under 'sas-validation')"
+            )
+
+        if local:
+            if users_file is None and defaults.users_file is None:
+                raise ManifestError(
+                    "--local needs a users file: pass --users-file or set "
+                    "'sas-validation.execution.users-file' in the config"
+                )
+            users_file = _existing_file(
+                users_file if users_file is not None else defaults.users_file,
+                "--users-file" if users_file is not None else "sas-validation.execution.users-file",
             )
 
         if custom_workload is not None:
@@ -1355,6 +1468,22 @@ def run(
                 )
             )
 
+        if local:
+            unsupported = scenario_package.unsupported_scenarios(workload_definition, "local")
+            if unsupported:
+                raise ManifestError(
+                    "These scenarios can only run in Kubernetes ('execution-targets' excludes local): "
+                    f"{', '.join(unsupported)}"
+                )
+            if headed and users is not None and users > HEADED_USERS_WARNING_THRESHOLD:
+                typer.echo(
+                    f"WARNING: --headed opens one browser window per user ({users}); "
+                    f"use headless mode for more than {HEADED_USERS_WARNING_THRESHOLD} users.",
+                    err=True,
+                )
+            if not generate_only:
+                _ensure_local_dependencies(yes)
+
         result = scenario_package.generate(
             workload_definition,
             output,
@@ -1365,19 +1494,65 @@ def run(
             users_file=_existing_file(users_file, "--users-file"),
             workload_overrides=_existing_file(workload_overrides, "--workload-overrides"),
             log_level=_normalized_log_level(log_level),
+            execution_target="local" if local else "kubernetes",
+            local_options={"headed": headed, "processes": processes} if local else None,
         )
         print(f"generated_workload_root={result.generated_workload_root}")
 
         if generate_only:
             return
 
-        exit_code = scenario_package.run_workload(workload_definition, result.generated_workload_root)
+        exit_code = scenario_package.run_workload(
+            workload_definition, result.generated_workload_root, local=local
+        )
         print(f"workload_exit_code={exit_code}")
         if exit_code:
             raise typer.Exit(code=exit_code)
     except (ManifestError, ProviderError, InstallError) as error:
         _fail(str(error))
 
+
+
+@app.command("cleanup")
+def cleanup_cmd(
+    local: bool = typer.Option(False, "--local", help="Inspect or stop tracked local runs only."),
+    list_only: bool = typer.Option(False, "--list", help="List recorded local runs without stopping them."),
+    run_id: Optional[str] = typer.Option(None, "--run-id", help="Local run ID printed in the workload log."),
+    stop: bool = typer.Option(False, "--stop", help="Stop the selected run after confirmation (otherwise preview only)."),
+    yes: bool = typer.Option(False, "--yes", help="Confirm stopping the selected run without prompting."),
+) -> None:
+    """Preview or clean up processes belonging to a specific local run."""
+    if not local:
+        raise typer.BadParameter("Cleanup requires --local; Kubernetes cleanup is not supported")
+    if os.name != "posix":
+        raise typer.BadParameter("Local cleanup requires macOS or Linux")
+    if list_only and (run_id is not None or stop or yes):
+        raise typer.BadParameter("--list cannot be combined with --run-id, --stop, or --yes")
+    if yes and not stop:
+        raise typer.BadParameter("--yes requires --stop")
+    if not list_only and run_id is None:
+        raise typer.BadParameter("Specify --list or --run-id")
+    try:
+        if list_only:
+            records = local_processes.list_runs()
+        else:
+            assert run_id is not None
+            records = [local_processes.read_record(run_id)]
+        if not records:
+            typer.echo("No recorded local runs.")
+        for record in records:
+            members = local_processes.owned_members(record)
+            pids = ", ".join(str(item["pid"]) for item in members) or "none (stale record)"
+            typer.echo(f"run_id={record['run_id']} processes={pids}\n  directory={record['cwd']}")
+        if stop:
+            assert run_id is not None
+            if yes or typer.confirm(f"Stop all owned processes for local run {run_id}?"):
+                local_processes.cleanup_run(run_id)
+                typer.echo(f"Cleaned up local run {run_id}.")
+        elif run_id is not None:
+            typer.echo("Preview only. Add --stop to request cleanup.")
+    except (OSError, ValueError, RuntimeError, psutil.Error) as error:
+        _fail(f"Local cleanup failed: {error}")
 
 
 @app.command("preflight")
@@ -1400,7 +1575,10 @@ def preflight_cmd(
     group: List[str] = typer.Option(
         [],
         "--group",
-        help="Limit the inspection to client or cluster checks (repeatable, default: all)",
+        help=(
+            "Check groups: client, cluster, or local (for run --local); repeatable "
+            "(default: client and cluster)"
+        ),
     ),
     fix: bool = typer.Option(False, "--fix", help="Apply the remediations that can be automated"),
     yes: bool = typer.Option(False, "--yes", help="Do not prompt before --fix"),

@@ -28,4 +28,4 @@ If you have a Kubernetes cluster where you can create a namespace, install an op
      While Kubernetes is excellent for running distributed, massive-scale tests, running locally or on external VMs offers a more agile environment for initial load testing or single user testing. 
      can simplify debugging, accelerate scenario development, and provide better visibility into test behavior.
      
-     To get started refer to [Getting Started with Running Locust Locally Outside of Kubernetes Using Locust Commands](./GETTING-STARTED-WITH-RUNNING-LOCUST-LOCALLY.md)
+     To get started refer to [Running Validation Scenarios Outside of Kubernetes](./GETTING-STARTED-WITH-RUNNING-LOCUST-LOCALLY.md) (`sas-validation run --local`)

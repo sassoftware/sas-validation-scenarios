@@ -1,75 +1,92 @@
 # SAS Validation CLI Cheatsheet
 
-Run commands from the `sas-validation-scenarios` repository root.
+Use this quick start to run a Kubernetes workload, then see the sections below for
+plugin management, local runs, and less common options. These setup commands are for
+Linux and macOS; run them from the repository root.
 
-## Install the CLI on Linux or macOS
+## Quick start
 
-Clone the repository and change to that directory:
+### 1. Install the CLI
+
 ```bash
-git clone <repository-url> sas-validation-scenarios
+git clone https://github.com/sassoftware/sas-validation-scenarios.git
 cd sas-validation-scenarios
-```
-
-Create and activate a virtual environment, then install the CLI and its Python packages:
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install -e .
 ```
-Set your kubernetes configuration file location:
+
+### 2. Connect to your Kubernetes cluster
+
+The CLI uses the current Kubernetes context. If your kubeconfig is not at the
+default `~/.kube/config` location, set its path:
 
 ```bash
-export KUBECONFIG=~/.kube/configs/my-k8s.config
+export KUBECONFIG="/path/to/your/kubeconfig"
 ```
 
-Create `sas-validation.yaml` from the template:
+### 3. Configure your SAS Viya URL and namespace
+
 ```bash
 cp sas-validation.yaml.template sas-validation.yaml
 ```
 
-Edit `sas-validation.yaml` and set `hostname` to your SAS Viya URL and `namespace` to the
-Kubernetes namespace the workloads run in (the template uses `testing`):
+Edit the `execution` settings in `sas-validation.yaml`:
+
 ```yaml
+sas-validation:
   execution:
     hostname: https://my-viya-system.example.com
-    namespace: testing
+    namespace: validation-scenarios
 ```
 
-Run the `preflight` check to ensure your environment is ready to run a scenario:
+Replace the example URL and namespace with values for your environment. Use a
+namespace where you can create the workload resources.
+
+### 4. Check your environment and install a scenario plugin
+
 ```bash
 sas-validation preflight
 ```
 
-If `preflight` finds issues, it can fix the ones that can be automated:
+If preflight reports issues, apply the fixes it can automate:
+
 ```bash
 sas-validation preflight --fix
 ```
 
-Install the default platform scenarios plugin (the leading `v` of the release tag is optional):
+Install the default platform scenarios plugin:
+
 ```bash
-sas-validation plugins install --version v2026.08
+sas-validation plugins install --version v2026.09
 ```
 
-Load your test users into a Kubernetes secret. Use the same namespace as `execution.namespace`:
-```bash
-sas-validation users load --users-file ./users.csv --namespace testing
-```
+The configured default plugin repository is `platform-scenarios`; the leading `v`
+in a plugin version is optional.
 
-The users file is a CSV file with one `user,password` row per user. For example:
+### 5. Load test users
+
+Create `users.csv` with one `user,password` pair per line and no header:
+
 ```text
-testUser1,a-secure-password
-testUser2,a-secure-password
-testUser3,a-secure-password
+testUser1,replace-with-a-test-password
+testUser2,replace-with-a-test-password
 ```
 
-Run a simple Hello World to ensure your environment is set up correctly:
+Replace the sample values with dedicated test account credentials; do not commit
+real credentials. Load the users into the same namespace configured above. If you
+change the namespace in the configuration, use the same value here:
+
 ```bash
-sas-validation run --workload helloviya-simple --plugin-version 2026.08
-
-sas-validation run --scenario helloviya-simple --test tests/logonoff.py --users 1 --plugin-version 2026.08
+sas-validation users load --users-file ./users.csv --namespace validation-scenarios
 ```
 
+### 6. Run a workload
+
+```bash
+sas-validation run --workload helloviya-simple --plugin-version 2026.09
+```
 
 ### Activate the environment in a later session
 
@@ -122,7 +139,7 @@ goes through one command group, modeled on the SAS Viya CLI `plugins` commands:
 | `plugins validate` | Check installed plugins for missing or invalid content |
 | `plugins uninstall` | Remove an installed plugin |
 
-List the configured repositories. The default repository is marked `(default)`:
+List the configured repositories. The default repository is the `default-repository` in `scenario-repositories.yaml` :
 
 ```bash
 sas-validation plugins list-repos
@@ -140,7 +157,7 @@ scenario-repositories:
   # Plugins containing platform-specific validation scenarios
   platform-scenarios:
     provider: github-release
-    repository: my-org/my-scenarios-project
+    repository: sassoftware/sas-validation-platform-scenarios
     visibility: public
 ```
 
@@ -283,7 +300,9 @@ sas-validation preflight --fix --yes --users-file ./users.csv
 sas-validation preflight --json
 ```
 
-`--group` is repeatable and accepts `client` or `cluster`. `--fix` applies
+`--group` is repeatable and accepts `client`, `cluster`, or `local`. Without `--group`,
+the `client` and `cluster` groups are checked; `local` checks the machine for
+`run --local` and runs only when requested. `--fix` applies
 automatable remediations; use `--yes` to skip its confirmation prompt. Add
 `--namespace`, `--hostname`, `--framework-root`, or `--timeout <seconds>` to
 override values used during inspection.
@@ -355,6 +374,31 @@ still finds `artifacts/runWorkload.sh` in those older folders.
 > `resolve`, `prepare`, and `generate` are not registered commands, and there is no top-level
 > `validate` (use `plugins validate` to check installed plugins). Use `run --generate-only` when generation without execution is needed.
 
+## Run locally, without Kubernetes
+
+`run --local` runs the workload with Locust on this machine. It needs no cluster,
+namespace, or `KUBECONFIG`, but needs the `local` extra and a users CSV file:
+
+```bash
+python3 -m pip install --prefer-binary -e '.[local]'
+sas-validation preflight --group local --fix --users-file ./users.csv
+sas-validation run --local --scenario helloviya-simple --test tests/logonoff.py --users 1 --users-file ./users.csv
+sas-validation run --local --workload helloviya-simple --plugin-version 2026.09 --headed
+sas-validation run --local --workload <workload> --processes 2 --generate-only
+```
+
+- Users come from `--users-file` or `sas-validation.execution.users-file`, never from the
+  Kubernetes secret.
+- Browsers are headless by default; `--headed` shows them (the CLI warns above 3 users).
+- `--processes` sets the Locust worker processes (default: the workload's user count).
+- Missing Locust/Playwright packages or the Chromium browser are detected before generation;
+  `run --local` asks before installing them (`--yes` installs without asking).
+- Generation writes `local/src/` and `runWorkloadLocal.sh` instead of the Kubernetes artifacts;
+  results land in the same `results/` and `execution-logs/` folders.
+- Scenarios whose `scenario-config.yaml` sets `execution-targets: [kubernetes]` are refused.
+
+See [documentation/GETTING-STARTED-WITH-RUNNING-LOCUST-LOCALLY.md](documentation/GETTING-STARTED-WITH-RUNNING-LOCUST-LOCALLY.md).
+
 ## Restricted or air-gapped environments
 
 The CLI can run plugin content transferred from a network-permitted staging
@@ -390,5 +434,3 @@ local plugin archives. `--plugin-version` and `--repo` are ignored when a plugin
 is supplied. `run` generates and executes the workload, so `--generate-only`
 does not replace Viya connectivity, and plugin generation scripts may have
 additional environment requirements.
-
-

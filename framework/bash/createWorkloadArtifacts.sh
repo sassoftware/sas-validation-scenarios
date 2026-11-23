@@ -111,8 +111,29 @@ buildDir=$workloadBaseDir/build
 mkdir -p $buildDir/logs
 timestamp=`date +%Y%m%d%H%M%S`
 exec 3>&1 4>&2
-trap 'exec 2>&4 1>&3' 0 1 2 3
-exec > >(tee -a $buildDir/logs/createWorkloadArtifacts_${timestamp}.log) 2>&1
+exec > >(tee -a "$buildDir/logs/createWorkloadArtifacts_${timestamp}.log") 2>&1
+TEE_PID=$!
+
+finish_logging() {
+  local rc=$? waited=0
+  trap - EXIT
+  trap '' INT TERM HUP
+  exec 2>&4 1>&3
+  while kill -0 "$TEE_PID" 2>/dev/null && [ "$waited" -lt 20 ]; do
+    sleep 0.1
+    waited=$(( waited + 1 ))
+  done
+  if kill -0 "$TEE_PID" 2>/dev/null; then
+    echo "WARNING: forcing the artifact log writer to stop; its output may be incomplete." >&2
+    kill -KILL "$TEE_PID" 2>/dev/null
+  fi
+  wait "$TEE_PID" 2>/dev/null
+  exit "$rc"
+}
+trap finish_logging EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 startTime=$(date +%s)
 echo -e "Starting to create artifacts for the  workload... $(date +%H:%M:%S) \n"
@@ -163,6 +184,12 @@ source "${buildDir}/setVariables.sh"
 if [ -n "$usersFile" ]; then
   echo "Copying the users file to the resources directory as : $resourcesDir/users.csv"
   cp $usersFileFullPath $resourcesDir/users.csv
+fi
+
+if [ "$executionTarget" = "local" ]; then
+  # Local run: stage the task files under local/src and create runWorkloadLocal.sh (no Kubernetes artifacts).
+  python3 ${frameworkScriptsLocationFullPath}/python/createLocalArtifacts.py -r $resourcesDir -o $workloadBaseDir -t $frameworkScriptsLocationFullPath/python/templates/run-workload-local.sh.template -ht $frameworkScriptsLocationFullPath/python/templates/run-workload-local-header.sh.template -l $logLevel || exit 1
+  exit 0
 fi
 
 # Create the custom resources

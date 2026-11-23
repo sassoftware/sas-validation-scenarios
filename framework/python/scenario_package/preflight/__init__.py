@@ -5,7 +5,7 @@
 
 from typing import Dict, List, Sequence
 
-from . import client_checks, cluster_checks, report
+from . import client_checks, cluster_checks, local_checks, report
 from .core import (
     Check,
     CheckResult,
@@ -19,11 +19,14 @@ from .core import (
 )
 
 # The 'viya' group in viya_checks.py is disabled until it is rewritten on the sas-viya admin CLI.
-GROUPS = ("client", "cluster")
+GROUPS = ("client", "cluster", "local")
+# Checked when no --group is given. 'local' (sas-validation run --local) must be requested explicitly.
+DEFAULT_GROUPS = ("client", "cluster")
 
 __all__ = [
     "Check",
     "CheckResult",
+    "DEFAULT_GROUPS",
     "Finding",
     "GROUPS",
     "PreflightContext",
@@ -39,14 +42,14 @@ __all__ = [
 
 
 def all_checks() -> List[Check]:
-    return client_checks.checks() + cluster_checks.checks()
+    return client_checks.checks() + cluster_checks.checks() + local_checks.checks()
 
 
 def select_checks(groups: Sequence[str]) -> List[Check]:
     """Checks for the requested groups plus the prerequisites they depend on."""
     checks = all_checks()
     if not groups:
-        return checks
+        groups = DEFAULT_GROUPS
     by_id: Dict[str, Check] = {check.identifier: check for check in checks}
     wanted = set()
 

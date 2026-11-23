@@ -8,6 +8,8 @@ The only requirement is access to a valid SAS Viya 4 web application.
 Before getting started, review the following documents:
 
 - [What are validation scenarios?](./documentation/INTRODUCTION.md)
+- [Where and how to execute sas-valdiation-scenarios](./documentation/BEFORE-YOU-START.md)
+
 
 # VERY IMPORTANT
 
@@ -38,11 +40,11 @@ The Scenarios or usecases are now delivered as plugins. These plugins will deliv
 Here are the available sas-validation-scenarios plugins repository
 
 
-| plugin name | link | versions | notes
-| ------ | ------ | ------| --- | 
-|    plaform    |   sas-validation-scenarios-platform     | 2026.08 | Starting with 2026.08, these will be validated and updated for every viya cadence that is supported.
-|     risk    |        |  | Will follow their own update cycle 
-|     fraud   |        | | Will follow their own update cycle.
+| plugin name | link | versions |
+| ------ | ------ | ------|  
+|    plaform    |   [sas-validation-scenarios-platform](https://github.com/sassoftware/sas-validation-scenarios-platform))     | Starting with 2026.08, these will be validated and updated for every viya cadence that is supported.
+|     risk    |  [sas-validation-scenarios-risk](https://github.com/sassoftware/sas-validation-scenarios-risk)      | Will follow their own update cycle 
+|     fraud   |  [sas-validation-scenarios-fraud ](https://github.com/sassoftware/sas-validation-scenarios-fraud)    | Will follow their own update cycle.
 
 ### What does plugin versions mean (--version)?
 Each validation scenario plugin contains a scenario validated for a specific viya cadence. When new cadences are released, the scenarios are validated against them and published as new plugin versions.
@@ -306,7 +308,6 @@ sas-validation plugins uninstall <plugin-path> --yes
 Plugins installed before install records existed are matched by the `repository` field of their
 `release-manifest.yaml`.
 
-
 # Workloads 
 
 Each plugins is built on testcases. And testcases can be run as a workload. 
@@ -388,6 +389,23 @@ generated/
 Workloads generated before this layout kept these files under `<workload>/artifacts/`. `run`
 still finds `artifacts/runWorkload.sh` in those older folders.
 
+### Run locally, without Kubernetes
+
+`run --local` runs the workload with Locust on this machine. Install the extra packages with
+`pip install --prefer-binary -e '.[local]'` (Python 3.10 or later recommended), check the machine with `sas-validation preflight --group local --fix`,
+and provide a users CSV with `--users-file` or `sas-validation.execution.users-file`. If the packages
+or the Chromium browser are missing, `run --local` offers to install them before it generates
+anything (`--yes` installs without asking):
+
+```bash
+sas-validation run --local --scenario helloviya-simple --test tests/logonoff.py --users 1 --users-file ./users.csv
+sas-validation run --local --workload <workload> --plugin-version <version> [--headed] [--processes <n>]
+```
+
+A local generation writes `local/src/` (the test files and their dependencies) and
+`runWorkloadLocal.sh` instead of the Kubernetes artifacts. See
+[Running Validation Scenarios Outside of Kubernetes](documentation/GETTING-STARTED-WITH-RUNNING-LOCUST-LOCALLY.md).
+
 > `resolve`, `prepare`, and `generate` are not registered commands, and there is no top-level
 > `validate` (use `plugins validate` to check installed plugins). Use `run --generate-only` when generation without execution is needed.
 
@@ -400,15 +418,20 @@ Maintainers are accepting patches and contributions to this project.
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details about submitting contributions to this project.
 
 ## Third-Party Dependencies
-This framework leverages several open source tools to automate, scale, and validate SAS Viya deployments.
+This project uses the following direct open source dependencies declared in `pyproject.toml`.
 
-| Dependency | License |
-| ---------- | ------- |
-| [Locust](https://locust.io/) | [MIT](https://github.com/locustio/locust/blob/master/LICENSE) |
-| [Playwright](https://playwright.dev/python/) | [Apache License 2.0](https://github.com/microsoft/playwright/blob/main/LICENSE) |
-| [Locust Plugins](https://github.com/SvenskaSpel/locust-plugins) | [Apache License 2.0](https://github.com/SvenskaSpel/locust-plugins/blob/master/LICENSE) |
+| Dependency | Use | License |
+| ---------- | --- | ------- |
+| [setuptools](https://pypi.org/project/setuptools/) | Build system | [MIT](https://github.com/pypa/setuptools/blob/main/LICENSE) |
+| [deepmerge](https://pypi.org/project/deepmerge/) | Runtime | [MIT](https://github.com/toumorokoshi/deepmerge/blob/master/LICENSE) |
+| [kubernetes](https://pypi.org/project/kubernetes/) | Runtime | [Apache License 2.0](https://github.com/kubernetes-client/python/blob/master/LICENSE) |
+| [platformdirs](https://pypi.org/project/platformdirs/) | Runtime | [MIT](https://github.com/tox-dev/platformdirs/blob/main/LICENSE) |
+| [psutil](https://pypi.org/project/psutil/) | Runtime | [BSD 3-Clause](https://github.com/giampaolo/psutil/blob/master/LICENSE) |
+| [PyYAML](https://pypi.org/project/PyYAML/) | Runtime | [MIT](https://github.com/yaml/pyyaml/blob/main/LICENSE) |
+| [Typer](https://pypi.org/project/typer/) | Runtime | [MIT](https://github.com/fastapi/typer/blob/master/LICENSE) |
+| [Locust](https://locust.io/) | Optional `local` extra | [MIT](https://github.com/locustio/locust/blob/master/LICENSE) |
+| [Locust Plugins](https://github.com/SvenskaSpel/locust-plugins) | Optional `local` extra | [Apache License 2.0](https://github.com/SvenskaSpel/locust-plugins/blob/master/LICENSE) |
+| [Playwright](https://playwright.dev/python/) | Optional `local` extra | [Apache License 2.0](https://github.com/microsoft/playwright/blob/main/LICENSE) |
+| [python-dotenv](https://pypi.org/project/python-dotenv/) | Optional `local` extra | [BSD 3-Clause](https://github.com/theskumar/python-dotenv/blob/main/LICENSE) |
 
-Locust is an open source performance testing framework used to generate scalable, automated, and distributed load tests.
-It integrates seamlessly with Playwright to enable UI-driven performance testing.
-Playwright is powerful end-to-end testing framework for Python that automates browser interactions to validate user interfaces and application workflows.
-Locust Plugins is community-developed project that extends Locust's capabilities, providing integration with Playwright and other utilities to enhance performance testing for SAS Viya environments.
+This list covers direct dependencies; transitive dependencies are governed by their respective licenses.
