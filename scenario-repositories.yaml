@@ -6,7 +6,7 @@ default-repository: platform-scenarios
 scenario-repositories:  
   platform-scenarios:
     provider: github-release
-    repository: sassoftware/sas-validation-platform-scenarios
+    repository: sassoftware/sas-validation-scenarios-platform
     visibility: public
 
   # Internal GitLab scenarios repository (example)
